@@ -29,8 +29,8 @@ void do_send()
             break;
         }
         std::cout << "write : " << buffer << "\n";
-        ipc.write(buffer);
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        ipc.write(buffer + std::to_string(Count));
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 }
 

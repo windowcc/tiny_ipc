@@ -19,11 +19,9 @@ public:
     Waiter();
     ~Waiter();
 public:
-    static void init();
-
     bool valid() const noexcept;
 
-    bool open() noexcept;
+    bool init() noexcept;
 
     void close() noexcept;
 
@@ -37,19 +35,17 @@ public:
     bool wait_for(F &&pred, std::uint64_t tm = static_cast<uint64_t>(TimeOut::INVALID_TIMEOUT)) noexcept
     {
         std::lock_guard<Mutex> guard{ mutex_ };
-        while ([this, &pred]
+        // while ([this, &pred]
+        // {
+        //     return std::forward<F>(pred)();
+        // }())
+
+        std::forward<F>(pred)();
+        if (!cond_.wait(mutex_, tm))
         {
-            return std::forward<F>(pred)();
-        }())
-        
-        {
-            std::cout << "Start of Wait...." << std::endl;
-            if (!cond_.wait(mutex_, tm))
-            {
-                return false;
-            }
-            std::cout << "End of Wait...." << std::endl;
+            return false;
         }
+
         return true;
     }
 

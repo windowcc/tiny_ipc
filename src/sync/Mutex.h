@@ -24,7 +24,7 @@ public:
 
     bool valid() const noexcept;
 
-    bool open() noexcept;
+    bool init() noexcept;
 
     void close() noexcept;
 

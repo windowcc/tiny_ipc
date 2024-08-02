@@ -18,18 +18,14 @@ Waiter::~Waiter()
     close();
 }
 
-void Waiter::init()
-{
-}
-
 bool Waiter::valid() const noexcept
 {
     return cond_.valid() && mutex_.valid();
 }
 
-bool Waiter::open() noexcept
+bool Waiter::init() noexcept
 {
-    return cond_.init() && mutex_.open();
+    return cond_.init() && mutex_.init();
 }
 
 void Waiter::close() noexcept

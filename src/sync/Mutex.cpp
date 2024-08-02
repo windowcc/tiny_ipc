@@ -33,7 +33,7 @@ bool Mutex::valid() const noexcept
     return (std::memcmp(tmp, &mutex_, sizeof(pthread_mutex_t)) != 0);
 }
 
-bool Mutex::open() noexcept
+bool Mutex::init() noexcept
 {
     close();
     ::pthread_mutex_destroy(&mutex_);

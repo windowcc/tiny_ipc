@@ -63,20 +63,8 @@ public:
     template <typename F>
     bool wait_for(F &&pred, std::uint64_t tm)
     {
-        // return tm == 0 ? !pred() : 
-        //     waiter()->wait_for(std::forward<F>(pred), tm);
-
-        bool status = false;
-        if(tm == 0)
-        {
-            status = !pred();
-        }
-        else
-        {
-            status = waiter()->wait_for(std::forward<F>(pred), tm);
-            std::cout << "Queue : End wait..." << std::endl;
-        }
-        return status;
+        return tm == 0 ? !pred() : 
+            waiter()->wait_for(std::forward<F>(pred), tm);
     }
 
     void disconnect()

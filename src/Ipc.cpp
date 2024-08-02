@@ -30,7 +30,6 @@ template <typename Wr>
 Ipc<Wr>::Ipc(char const * name, const unsigned &mode)
     : impl_ {std::make_unique<Ipc<Wr>::IpcImpl>()}
 {
-    Waiter::init();
     connect(name, mode);
 }
 
@@ -242,17 +241,18 @@ Buffer Ipc<Wr>::read(std::uint64_t tm)
     for (;;)
     {
         // pop a new message
+        // ! 此处有BUG,  消息队列中可能同时存在多个数据.  而且用于存放数据描述符的队列长度目前是256
+        // ! 目前一个循环只能读取一个数据. 如果数据发送过来可能会导致无法正常读取数据
+
+        // ! 改进为每次可以将整个数组中的描述信息全部读取到.
         BufferDesc desc{};
-        std::cout << "Status is " << connected_impl << std::endl;
         if (!handle_impl->wait_for([que, &desc]
         {
             return !que->pop(desc);
         }, tm))
         {
-            std::cout << "Empty message" << std::endl;
             return {};
         }
-        std::cout << "Has message" << std::endl;
         return std::move(fragment_impl->read(desc));
     }
 }

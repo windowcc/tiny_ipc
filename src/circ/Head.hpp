@@ -44,7 +44,7 @@ public:
             if (!constructed_.load(std::memory_order_relaxed))
             {
                 ::new (this) ConnHeadBase;
-                waiter_.open();
+                waiter_.init();
                 constructed_.store(true, std::memory_order_release);
             }
         }
