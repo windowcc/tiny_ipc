@@ -9,6 +9,7 @@
 #include <string.h>
 #include <memory_resource>
 #include <unordered_map>
+#include <ipc/Buffer.h>
 #include <ipc/Ipc.h>
 
 namespace {
@@ -34,24 +35,36 @@ void do_send()
     }
 }
 
+class SendCallback : public ipc::Callback
+{
+public:
+    virtual void message_arrived(const ipc::Buffer *buf /*msg*/) final{
+        std::cout << "read size: " << std::string((char*)buf->data(),buf->size()) << "\n";
+    }
+};
+
 void do_recv()
 {
     std::cout << "Please Enter Ctrl + C to End." << std::endl;
     ipc::Channel ipc {"ipc", ipc::RECEIVER};
+    auto callback = std::make_shared<SendCallback>();
+    ipc.set_callback(std::dynamic_pointer_cast<ipc::Callback>(callback));
     Ipc = &ipc;
-    while (!IsQuit.load(std::memory_order_acquire))
-    {
-        ipc::Buffer recv;
-        for (int k = 1; recv.empty(); ++k)
-        {
-            recv = ipc.read();
-            if (IsQuit.load(std::memory_order_acquire))
-            {
-                return;
-            }
-        }
-        std::cout << "read size: " << std::string((char*)recv.data(),recv.size()) << "\n";
-    }
+    
+    ipc.read();
+    // while (!IsQuit.load(std::memory_order_acquire))
+    // {
+    //     ipc::Buffer recv;
+    //     for (int k = 1; recv.empty(); ++k)
+    //     {
+    //         recv = ipc.read();
+    //         if (IsQuit.load(std::memory_order_acquire))
+    //         {
+    //             return;
+    //         }
+    //     }
+    //     std::cout << "read size: " << std::string((char*)recv.data(),recv.size()) << "\n";
+    // }
 }
 
 } // namespace

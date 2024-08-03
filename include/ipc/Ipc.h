@@ -2,12 +2,16 @@
 #define _IPC_IPC_H_
 
 #include <string>
+#include <memory>
+#include <functional>
 #include <ipc/export.h>
 #include <ipc/def.h>
 #include <ipc/Buffer.h>
+#include <ipc/Callback.h>
 
 namespace ipc
 {
+
 template <typename Wr>
 class Ipc
 {
@@ -33,13 +37,15 @@ public:
 
     void disconnect();
 
+    void set_callback(CallbackPtr);
+
     bool write(void const * data, std::size_t size);
 
     bool write(Buffer const & buff);
 
     bool write(std::string const & str);
 
-    Buffer read(std::uint64_t tm = static_cast<uint64_t>(TimeOut::INVALID_TIMEOUT));
+    void read(std::uint64_t tm = static_cast<uint64_t>(TimeOut::INVALID_TIMEOUT));
 
 private:
     struct IpcImpl;

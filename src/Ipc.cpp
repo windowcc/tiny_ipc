@@ -4,6 +4,7 @@
 #include <PoolAlloc.h>
 #include <MessageQueue.hpp>
 #include <Choose.hpp>
+#include <ipc/Callback.h>
 #include <fragment/Fragment.hpp>
 #include <circ/Segment.hpp>
 
@@ -16,6 +17,7 @@ namespace ipc
 #define fragment_impl       (impl_->fragment)
 #define mode_impl           (impl_->mode)
 #define connected_impl      (impl_->connected)
+#define callback_impl       (impl_->callback)
 template<typename Wr>
 struct Ipc<Wr>::IpcImpl
 {
@@ -24,6 +26,7 @@ struct Ipc<Wr>::IpcImpl
     std::unique_ptr<FragmentBase> fragment {nullptr};
     unsigned mode { SENDER };
     std::atomic_bool connected { false };
+    CallbackPtr callback {nullptr};
 };
 
 template <typename Wr>
@@ -164,6 +167,15 @@ void Ipc<Wr>::disconnect()
 }
 
 template <typename Wr>
+void Ipc<Wr>::set_callback(CallbackPtr callback)
+{
+    if(!callback_impl)
+    {
+        callback_impl = callback;
+    }
+}
+
+template <typename Wr>
 bool Ipc<Wr>::write(void const *data, std::size_t size)
 {
     if (!valid() || data == nullptr || size == 0)
@@ -223,37 +235,37 @@ static std::string thread_id_to_string(const std::thread::id &id)
 }
 
 template <typename Wr>
-Buffer Ipc<Wr>::read(std::uint64_t tm)
+void Ipc<Wr>::read(std::uint64_t tm)
 {
     if(!valid())
     {
-        return {};
+        return ;
     }
     auto que = handle_impl->queue();
     if (que == nullptr)
     {
-        return {};
+        return ;
     }
     if (!que->connected())
     {
-        return {};
+        return ;
     }
     for (;;)
     {
-        // pop a new message
-        // ! 此处有BUG,  消息队列中可能同时存在多个数据.  而且用于存放数据描述符的队列长度目前是256
-        // ! 目前一个循环只能读取一个数据. 如果数据发送过来可能会导致无法正常读取数据
-
-        // ! 改进为每次可以将整个数组中的描述信息全部读取到.
         BufferDesc desc{};
-        if (!handle_impl->wait_for([que, &desc]
+        handle_impl->wait_for([que, &desc]
         {
             return !que->pop(desc);
-        }, tm))
+        }, tm);
+        if(!connected_impl)
         {
-            return {};
+            break;
         }
-        return std::move(fragment_impl->read(desc));
+        if(callback_impl)
+        {
+            auto buf = fragment_impl->read(desc);
+            callback_impl->message_arrived(&buf);
+        }
     }
 }
 
