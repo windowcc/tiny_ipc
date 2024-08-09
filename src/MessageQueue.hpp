@@ -2,7 +2,7 @@
 #define _IPC_CONNECT_INFO_H_
 
 #include <Queue.hpp>
-#include <BufferDesc.hpp>
+#include <Descriptor.h>
 #include <sync/Waiter.h>
 
 namespace ipc
@@ -14,7 +14,7 @@ template <typename Choose>
 class MessageQueue
 {
 public:
-    using queue_t = Queue<BufferDesc, Choose>;
+    using queue_t = Queue<Descriptor, Choose>;
 public:
     explicit MessageQueue(char const *prefix, char const *name)
         : prefix_{make_string(prefix)}
@@ -32,7 +32,7 @@ public:
         if (!queue_.valid())
         {
             if(queue_.open(make_prefix(prefix_,
-                {to_string(sizeof(BufferDesc)), "_",to_string(alignof(std::max_align_t)), "_",this->name_}).c_str()))
+                {to_string(sizeof(Descriptor)), "_",to_string(alignof(std::max_align_t)), "_",this->name_}).c_str()))
             {
                 return false;
             }
@@ -50,21 +50,20 @@ public:
         return name_;
     }
 
-    inline Waiter *waiter()
-    {
-        return &(queue_.segment_->waiter_);
-    }
-
     inline queue_t *queue()
     {
         return &queue_;
     }
 
     template <typename F>
-    bool wait_for(F &&pred, std::uint64_t tm)
+    void wait_for(F &&pred, std::uint64_t tm)
     {
-        return tm == 0 ? !pred() : 
-            waiter()->wait_for(std::forward<F>(pred), tm);
+        waiter()->wait_for(std::forward<F>(pred), tm);
+    }
+
+    inline Waiter *waiter() noexcept
+    {
+        return queue_.waiter();
     }
 
     void disconnect()

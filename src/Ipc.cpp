@@ -1,12 +1,11 @@
 #include <ipc/Ipc.h>
 #include <shared_mutex>
 #include <Handle.h>
-#include <PoolAlloc.h>
 #include <MessageQueue.hpp>
 #include <Choose.hpp>
 #include <ipc/Callback.h>
-#include <fragment/Fragment.hpp>
-#include <circ/Segment.hpp>
+#include <core/Fragment.hpp>
+#include <core/Segment.hpp>
 
 using namespace ipc::detail;
 
@@ -145,6 +144,12 @@ bool Ipc<Wr>::reconnect(unsigned mode)
     {
         handle_impl->disconnect();
     }
+
+    if(callback_impl)
+    {
+        callback_impl->connected();
+    }
+
     return que->ready_sending();
 }
 
@@ -164,6 +169,11 @@ void Ipc<Wr>::disconnect()
     que->shut_sending();
     assert((handle_impl) != nullptr);
     handle_impl->disconnect();
+
+    if(callback_impl)
+    {
+        callback_impl->connection_lost();
+    }
 }
 
 template <typename Wr>
@@ -202,7 +212,7 @@ bool Ipc<Wr>::write(void const *data, std::size_t size)
     }
 
     auto desc = fragment_impl->write(data,size);
-    if(!desc.valid())
+    if(!desc.length())
     {
         return false;
     }
@@ -211,7 +221,21 @@ bool Ipc<Wr>::write(void const *data, std::size_t size)
     {
         return false;
     }
-    handle_impl->waiter()->broadcast();
+    if(Wr::is_broadcast)
+    {
+        handle_impl->waiter()->broadcast();
+    }
+    else
+    {
+        handle_impl->waiter()->notify();
+    }
+    
+
+    if(callback_impl)
+    {
+        callback_impl->delivery_complete();
+    }
+
     return true;
 }
 
@@ -252,20 +276,27 @@ void Ipc<Wr>::read(std::uint64_t tm)
     }
     for (;;)
     {
-        BufferDesc desc{};
-        handle_impl->wait_for([que, &desc]
-        {
-            return !que->pop(desc);
-        }, tm);
         if(!connected_impl)
         {
             break;
         }
-        if(callback_impl)
+
+        handle_impl->wait_for([&]
         {
-            auto buf = fragment_impl->read(desc);
-            callback_impl->message_arrived(&buf);
-        }
+            Descriptor desc{};
+            while(!que->empty())
+            {
+                if(!que->pop(desc))
+                {
+                    return;
+                }
+                auto buf = fragment_impl->read(desc);
+                if(!buf.empty())
+                {
+                    callback_impl->message_arrived(&buf);
+                }
+            }
+        }, tm);
     }
 }
 

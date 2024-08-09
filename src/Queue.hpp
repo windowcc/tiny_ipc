@@ -7,7 +7,7 @@
 #include <Handle.h>
 #include <sync/RwLock.h>
 #include <Resource.hpp>
-#include <iostream>
+#include <sync/Waiter.h>
 
 namespace ipc
 {
@@ -32,26 +32,26 @@ public:
     }
 
     template <typename Segment>
-    auto connect(Segment *elems) noexcept
+    auto connect(Segment *segment) noexcept
         -> std::tuple<bool, bool, decltype(std::declval<Segment>().cursor())>
     {
-        if (elems == nullptr)
+        if (segment == nullptr)
             return {};
         // if it's already connected, just return
         if (connected())
             return {connected(), false, 0};
-        connected_ = elems->connect_receiver();
-        return {connected(), true, elems->cursor()};
+        connected_ = segment->connect_receiver();
+        return {connected(), true, segment->cursor()};
     }
 
     template <typename Segment>
-    bool disconnect(Segment *elems) noexcept
+    bool disconnect(Segment *segment) noexcept
     {
-        if (elems == nullptr)
+        if (segment == nullptr)
             return false;
         if (!connected())
             return false;
-        elems->disconnect_receiver(std::exchange(connected_, 0));
+        segment->disconnect_receiver(std::exchange(connected_, 0));
         return true;
     }
 
@@ -67,13 +67,13 @@ protected:
         {
             return nullptr;
         }
-        auto elems = static_cast<Segment *>(handle_.get());
-        if (elems == nullptr)
+        auto segment = static_cast<Segment *>(handle_.get());
+        if (segment == nullptr)
         {
             return nullptr;
         }
-        elems->init();
-        return elems;
+        segment->init();
+        return segment;
     }
 
     void close()
@@ -114,11 +114,12 @@ public:
 
         if(handle_.ref() <= 1)
         {
-            segment_->waiter_.close();
+            segment_->waiter().close();
         }
         base_t::close();
     }
 
+public:
     bool open(char const *name) noexcept
     {
         base_t::close();
@@ -203,14 +204,20 @@ public:
         {
             return false;
         }
-        return segment_->pop(this, &(this->cursor_), [&item](void *p)
+        return segment_->pop(this, &cursor_, [&item](void *p)
         {
             ::new (&item) Msg(std::move(*static_cast<Msg *>(p)));
         }, std::forward<F>(out));
     }
 
-public:
+    inline Waiter *waiter() noexcept
+    {
+        return &(segment_->waiter());
+    }
+
+protected:
     segment_t *segment_ = nullptr;
+protected:
     decltype(std::declval<segment_t>().cursor()) cursor_ = 0;
     bool sender_flag_ = false;
 };

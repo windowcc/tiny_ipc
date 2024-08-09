@@ -1,5 +1,5 @@
-#ifndef _IPC_FRAGMENT_FRAGMENT_H_
-#define _IPC_FRAGMENT_FRAGMENT_H_
+#ifndef _IPC_CORE_FRAGMENT_H_
+#define _IPC_CORE_FRAGMENT_H_
 
 #include <thread>
 #include <sstream>
@@ -157,16 +157,16 @@ public:
 
     virtual Buffer read(const Descriptor &desc) final
     {
-        Handle *handle = get_handle(desc.id);
+        Handle *handle = get_handle(desc.id());
         if(handle == nullptr)
         {
             return Buffer{};
         }
         //通过偏移量计算地址
-        void *pool_data = static_cast<char*>(handle->get()) + desc.offset;
+        void *pool_data = static_cast<char*>(handle->get()) + desc.offset();
 
         return std::move(Buffer(static_cast<char*>(pool_data) + alignof(std::max_align_t), 
-            desc.len - alignof(std::max_align_t), [](void *p, std::size_t size) -> void
+            desc.length() - alignof(std::max_align_t), [](void *p, std::size_t size) -> void
         {
             (void)size;
             // 字符串向前偏移 alignof(std::max_align_t) 长度是计数器的首地址
@@ -207,4 +207,4 @@ private:
 } // namespace detail
 } // namespace ipc
 
-#endif // ! _IPC_FRAGMENT_FRAGMENT_H_
+#endif // ! _IPC_CORE_FRAGMENT_H_

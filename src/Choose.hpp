@@ -2,8 +2,8 @@
 #define _IPC_POLICY_H_
 
 #include <type_traits>
-#include <ProdCons.hpp>
-#include <circ/Segment.hpp>
+#include <Policies.hpp>
+#include <core/Segment.hpp>
 
 namespace ipc
 {
@@ -17,7 +17,7 @@ namespace detail
     struct Choose<Segment, Wr>
     {
         template <std::size_t DataSize, std::size_t AlignSize>
-        using segment_t = Segment<ipc::ProdCons<Wr>, DataSize, AlignSize>;
+        using segment_t = Segment<ipc::Policies<Wr>, DataSize, AlignSize>;
     };
 
 } // namespace detail

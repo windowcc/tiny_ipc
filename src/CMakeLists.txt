@@ -2,8 +2,8 @@
 set(${PROJECT_NAME}_source_files
     Buffer.cpp
     Ipc.cpp
-    PoolAlloc.cpp
     Handle.cpp
+    Descriptor.cpp
 )
 
 set(${PROJECT_NAME}_sync_source_files

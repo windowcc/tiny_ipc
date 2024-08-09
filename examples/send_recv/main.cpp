@@ -1,15 +1,8 @@
 
 #include <signal.h>
-#include <iostream>
-#include <string>
-#include <thread>
-#include <chrono>
-#include <atomic>
-#include <array>
 #include <string.h>
-#include <memory_resource>
-#include <unordered_map>
-#include <ipc/Buffer.h>
+#include <iostream>
+#include <atomic>
 #include <ipc/Ipc.h>
 
 namespace {
@@ -31,7 +24,6 @@ void do_send()
         }
         std::cout << "write : " << buffer << "\n";
         ipc.write(buffer + std::to_string(Count));
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 }
 
@@ -47,24 +39,10 @@ void do_recv()
 {
     std::cout << "Please Enter Ctrl + C to End." << std::endl;
     ipc::Channel ipc {"ipc", ipc::RECEIVER};
-    auto callback = std::make_shared<SendCallback>();
-    ipc.set_callback(std::dynamic_pointer_cast<ipc::Callback>(callback));
+    ipc.set_callback(
+        std::dynamic_pointer_cast<ipc::Callback>(std::make_shared<SendCallback>()));
     Ipc = &ipc;
-    
     ipc.read();
-    // while (!IsQuit.load(std::memory_order_acquire))
-    // {
-    //     ipc::Buffer recv;
-    //     for (int k = 1; recv.empty(); ++k)
-    //     {
-    //         recv = ipc.read();
-    //         if (IsQuit.load(std::memory_order_acquire))
-    //         {
-    //             return;
-    //         }
-    //     }
-    //     std::cout << "read size: " << std::string((char*)recv.data(),recv.size()) << "\n";
-    // }
 }
 
 } // namespace
@@ -75,7 +53,6 @@ int main(int argc, char ** argv)
     {
         return -1;
     }
-
     auto exit = [](int)
     {
         IsQuit.store(true, std::memory_order_release);

@@ -26,7 +26,7 @@ public:
 
     void close() noexcept;
 
-    bool wait(Mutex &mtx, std::uint64_t tm = static_cast<uint64_t>(TimeOut::INVALID_TIMEOUT)) noexcept;
+    bool wait(Mutex &mtx, std::uint64_t tm = static_cast<uint64_t>(TimeOut::DEFAULT_TIMEOUT)) noexcept;
 
     bool notify(Mutex &) noexcept;
 

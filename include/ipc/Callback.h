@@ -1,10 +1,9 @@
 #ifndef _IPC_CALLBACK_H_
 #define _IPC_CALLBACK_H_
 
-#include <vector>
 #include <memory>
-// #include <iostream>
-// #include <ipc/Buffer.h>
+#include <string>
+#include <ipc/ErrorCode.h>
 
 namespace ipc {
 
@@ -25,11 +24,10 @@ public:
 	using const_ptr_t = std::shared_ptr<const Callback>;
 
 	virtual ~Callback() {}
-
-	// virtual void connected(const string& /*cause*/) {}
-	// virtual void connection_lost(const string& /*cause*/) {}
+	virtual void connected(const ErrorCode &cause = ErrorCode::IPC_ERR_SUCCESS) {}
+	virtual void connection_lost(const ErrorCode &cause = ErrorCode::IPC_ERR_SUCCESS) {}
 	virtual void message_arrived(const Buffer *buf /*msg*/) {}
-	// virtual void delivery_complete(delivery_token_ptr /*tok*/) {}
+	virtual void delivery_complete(const ErrorCode &cause = ErrorCode::IPC_ERR_SUCCESS) {}
 };
 
 /** Smart/shared pointer to a callback object */
