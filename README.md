@@ -1,1 +1,3 @@
-# tiny-ipc (libipc) - C++ IPC Library
+# tiny-ipc - C++ IPC Library
+
+# High performance inter process communication library based on shared memory.
