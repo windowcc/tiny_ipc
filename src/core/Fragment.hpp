@@ -71,6 +71,8 @@ public:
 
     virtual ~Fragment<SENDER>()
     {
+        // free all apply memory
+        // There may be some memory that has not been read properly
         for (auto &it : map_)
         {
             pool_->deallocate(it.first,it.second);
@@ -94,43 +96,58 @@ public:
 
     virtual Descriptor write(void const *data, const std::size_t &size,const uint32_t &cnt = DEFAULT_WRITE_CNT) final
     {
-        remove_pool();
+        recyle_memory();
 
-        auto pool_size = align_size(size,alignof(std::max_align_t)) + alignof(std::max_align_t);
+        auto pool_size = align_size(size + sizeof(uint32_t), alignof(std::max_align_t));
         void *pool_data = pool_->allocate(pool_size);
 
-        alignas(alignof(std::max_align_t)) std::atomic<uint32_t> *count = static_cast<std::atomic<uint32_t>*>(pool_data);
-        count->store(cnt,std::memory_order_acquire);
-        memcpy(static_cast<char*>(pool_data) + alignof(std::max_align_t),data,size);
+        std::atomic<uint32_t> *count = static_cast<std::atomic<uint32_t>*>(pool_data);
+        count->store(cnt,std::memory_order_relaxed);
+        memcpy(static_cast<char*>(pool_data) + sizeof(uint32_t),data,size);
         
-        map_.insert({pool_data,pool_size});
-        return {id_, reinterpret_cast<std::size_t>(pool_data) - reinterpret_cast<std::size_t>(handle_.get()), pool_size};
+        map_.insert(
+            {pool_data,pool_size}
+        );
+
+        return
+        {
+            id_,
+            reinterpret_cast<std::size_t>(pool_data) - reinterpret_cast<std::size_t>(handle_.get()),
+            pool_size
+        };
     }
 
 private:
 
-    void remove_pool()
+    void recyle_memory()
     {
         if(map_.empty())
         {
             return;
         }
-        for (auto it = map_.begin(); it != map_.end(); ++it)
+        for (auto it = map_.begin(); it != map_.end();)
         {
-            alignas(alignof(std::max_align_t)) std::atomic<uint32_t> *count = static_cast<std::atomic<uint32_t>*>(it->first);
-            if(count->load(std::memory_order_relaxed) == 0)
+            std::atomic<uint32_t> *count = static_cast<std::atomic<uint32_t>*>(it->first);
+            if(!count->load())
             {
                 pool_->deallocate(it->first,it->second);
-                map_.erase(it);
+                it = map_.erase(it);
+            }
+            else
+            {
+                ++it;
             }
         }
     }
 
 private:
-    std::thread::id id_;            // thread id
-    Handle handle_;                 // 根据线程id创建的共享内存段 (!!!! )
-    std::shared_ptr<std::pmr::monotonic_buffer_resource> pool_;     // 用于接管共享内存段
-
+    // thread id
+    std::thread::id id_;
+    // shm handle
+    Handle handle_;
+    // shared memory manager
+    std::shared_ptr<std::pmr::monotonic_buffer_resource> pool_;
+    // already memory using map
     std::unordered_map<void*,std::size_t> map_;
 };
 
@@ -162,17 +179,16 @@ public:
         {
             return Buffer{};
         }
-        //通过偏移量计算地址
         void *pool_data = static_cast<char*>(handle->get()) + desc.offset();
 
-        return std::move(Buffer(static_cast<char*>(pool_data) + alignof(std::max_align_t), 
-            desc.length() - alignof(std::max_align_t), [](void *p, std::size_t size) -> void
+        return std::move(Buffer(static_cast<char*>(pool_data) + sizeof(uint32_t), 
+            desc.length() - sizeof(uint32_t), [](void *p, std::size_t size) -> void
         {
             (void)size;
-            // 字符串向前偏移 alignof(std::max_align_t) 长度是计数器的首地址
-            alignas(alignof(std::max_align_t)) std::atomic<uint32_t> *cnt  = 
-                    static_cast<std::atomic<uint32_t>*>(static_cast<void*>(static_cast<char*>(p) - alignof(std::max_align_t)));
-            cnt->fetch_sub(1,std::memory_order_release);
+            std::atomic<uint32_t> *cnt  =  static_cast<std::atomic<uint32_t>*>(
+                            static_cast<void*>(static_cast<char*>(p) - sizeof(uint32_t)));
+
+            cnt->fetch_sub(1, std::memory_order_relaxed);
         }));
     }
 private:
@@ -190,7 +206,9 @@ private:
             }
             else
             {
-                handles_.insert({id, std::move(handle)});
+                handles_.insert(
+                    {id, std::move(handle)}
+                );
                 return &(handles_[id]);
             }
         }
