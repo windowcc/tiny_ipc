@@ -78,6 +78,10 @@ bool Ipc<Wr>::connect(char const * name, const unsigned &mode)
 {
     if (name == nullptr || name[0] == '\0')
     {
+        if(callback_impl)
+        {
+            callback_impl->connected(ErrorCode::IPC_ERR_NOINIT);
+        }
         return false;
     }
 
@@ -92,8 +96,13 @@ bool Ipc<Wr>::connect(char const * name, const unsigned &mode)
     default:
         break;
     }
+
     if(!fragment_impl->init())
     {
+        if(callback_impl)
+        {
+            callback_impl->connected(ErrorCode::IPC_ERR_NOINIT);
+        }
         return false;
     }
 
@@ -103,6 +112,10 @@ bool Ipc<Wr>::connect(char const * name, const unsigned &mode)
         handle_impl = std::make_shared<MessageQueue<Choose<Segment, Wr>> >(nullptr,name);
         if(handle_impl->init())
         {
+            if(callback_impl)
+            {
+                callback_impl->connected(ErrorCode::IPC_ERR_NOINIT);
+            }
             return false;
         }
     }
@@ -115,27 +128,55 @@ bool Ipc<Wr>::reconnect(unsigned mode)
 {
     if (!valid())
     {
+        if(callback_impl)
+        {
+            callback_impl->connected(ErrorCode::IPC_ERR_INVAL);
+        }
         return false;
     }
     if (connected_impl && (mode_impl == mode))
     {
+        if(callback_impl)
+        {
+            callback_impl->connected();
+        }
         return true;
     }
 
     auto que = handle_impl->queue();
     if (que == nullptr)
     {
+        if(callback_impl)
+        {
+            callback_impl->connected(ErrorCode::IPC_ERR_NOMEM);
+        }
         return false;
     }
 
-    handle_impl->init();
+    if(!(handle_impl->init()))
+    {
+        if(callback_impl)
+        {
+            callback_impl->connected(ErrorCode::IPC_ERR_NOINIT);
+        }
+        return false;
+    }
 
     if (mode & RECEIVER)
     {
         que->shut_sending();
         if (que->connect())
         {
+            if(callback_impl)
+            {
+                callback_impl->connected();
+            }
             return true;
+        }
+
+        if(callback_impl)
+        {
+            callback_impl->connected(ErrorCode::IPC_ERR_NOINIT);
         }
         return false;
     }
@@ -158,11 +199,19 @@ void Ipc<Wr>::disconnect()
 {
     if (!valid())
     {
+        if(callback_impl)
+        {
+            callback_impl->connection_lost(ErrorCode::IPC_ERR_NOMEM);
+        }
         return;
     }
     auto que = handle_impl->queue();
     if (que == nullptr)
     {
+        if(callback_impl)
+        {
+            callback_impl->connection_lost(ErrorCode::IPC_ERR_NOMEM);
+        }
         return;
     }
     connected_impl = false;
@@ -186,41 +235,43 @@ void Ipc<Wr>::set_callback(CallbackPtr callback)
 }
 
 template <typename Wr>
+bool Ipc<Wr>::is_connected() const noexcept
+{
+    return connected_impl;
+}
+
+template <typename Wr>
 bool Ipc<Wr>::write(void const *data, std::size_t size)
 {
     if (!valid() || data == nullptr || size == 0)
     {
+        if(callback_impl)
+        {
+            callback_impl->delivery_complete(ErrorCode::IPC_ERR_NOINIT);
+        }
         return false;
     }
     auto que = handle_impl->queue();
-    if (que == nullptr)
+    if (que == nullptr || que->elems() == nullptr || !que->ready_sending() ||
+            que->elems()->connections(std::memory_order_relaxed) == 0)
     {
-        return false;
-    }
-    if (que->elems() == nullptr)
-    {
-        return false;
-    }
-    if (!que->ready_sending())
-    {
-        return false;
-    }
-    uint32_t conns = que->elems()->connections(std::memory_order_relaxed);
-    if (conns == 0)
-    {
+        if(callback_impl)
+        {
+            callback_impl->delivery_complete(ErrorCode::IPC_ERR_NOMEM);
+        }
         return false;
     }
 
     auto desc = fragment_impl->write(data,size);
-    if(!desc.length())
+    if(!desc.length() || !que->push(desc))
     {
+        if(callback_impl)
+        {
+            callback_impl->delivery_complete(ErrorCode::IPC_ERR_INVAL);
+        }
         return false;
     }
 
-    if(!que->push(desc))
-    {
-        return false;
-    }
     if(Wr::is_broadcast)
     {
         handle_impl->waiter()->broadcast();
@@ -263,20 +314,32 @@ void Ipc<Wr>::read(std::uint64_t tm)
 {
     if(!valid())
     {
+        if(callback_impl)
+        {
+            callback_impl->message_arrived(ErrorCode::IPC_ERR_NOMEM);
+        }
         return ;
     }
     auto que = handle_impl->queue();
     if (que == nullptr)
     {
+        if(callback_impl)
+        {
+            callback_impl->message_arrived(ErrorCode::IPC_ERR_NOMEM);
+        }
         return ;
     }
     if (!que->connected())
     {
+        if(callback_impl)
+        {
+            callback_impl->message_arrived(ErrorCode::IPC_ERR_NO_CONN);
+        }
         return ;
     }
     for (;;)
     {
-        if(!connected_impl)
+        if(!is_connected())
         {
             break;
         }

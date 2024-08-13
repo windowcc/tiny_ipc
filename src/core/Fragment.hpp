@@ -8,6 +8,7 @@
 #include <unordered_map>
 #include <memory_resource>
 #include <ipc/def.h>
+#include <sync/RwLock.h>
 #include <Handle.h>
 
 namespace ipc
@@ -18,6 +19,9 @@ namespace detail
 static constexpr uint32_t DEFAULT_WRITE_CNT = 1;
 static constexpr std::size_t DEFAULT_CACHE_SIZE = 1024 * 1024 * 1024; // 1G
 static const std::string DEFAULT_SHM_NAME = "tiny_ipc_";
+
+// Unified release after the application ends
+static std::unordered_map<std::string, std::shared_ptr<SpinLock>> locks;
     
 
 static std::string thread_id_to_string(const std::thread::id &id)
@@ -56,6 +60,10 @@ public:
 template<unsigned>
 class Fragment{};
 
+
+// Just need to add a lock on the writer end
+// When releasing memory, it will first determine whether the usage count of the current memory segment has been reset.
+// Therefore, there is no need to perform a locking operation
 template<>
 class Fragment<SENDER> : public FragmentBase
 {
@@ -83,11 +91,22 @@ public:
 public:
     virtual bool init() final
     {
+        // Apply for shared memory space
         auto name = DEFAULT_SHM_NAME + thread_id_to_string(id_);
         if (!handle_.acquire(name.c_str(), DEFAULT_CACHE_SIZE))
         {
             return false;
         }
+
+        // Create a new lock, if it does not exist
+        if(locks.find(std::string{"/"} + name) == locks.end())
+        {
+            locks.insert(
+                {std::string{"/"} + name,std::make_shared<SpinLock>()}
+            );
+        }
+
+        // std::pmr 
         pool_ = std::make_shared<std::pmr::monotonic_buffer_resource>(handle_.get(),handle_.size(),
                     std::pmr::null_memory_resource());
 
@@ -99,7 +118,19 @@ public:
         recyle_memory();
 
         auto pool_size = align_size(size + sizeof(uint32_t), alignof(std::max_align_t));
-        void *pool_data = pool_->allocate(pool_size);
+        void *pool_data = nullptr;
+
+        auto it = locks.find(std::string(handle_.name()));
+        if ( it != locks.end())
+        {
+            std::lock_guard<SpinLock> l(*(it->second));
+            pool_data = pool_->allocate(pool_size);
+        }
+
+        if(!pool_data)
+        {
+            return {};
+        }
 
         std::atomic<uint32_t> *count = static_cast<std::atomic<uint32_t>*>(pool_data);
         count->store(cnt,std::memory_order_relaxed);

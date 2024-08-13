@@ -24,9 +24,38 @@ public:
 	using const_ptr_t = std::shared_ptr<const Callback>;
 
 	virtual ~Callback() {}
+public:
+    /**
+     * @brief Create connection callback function
+     * 
+     * @param cause 
+     */
 	virtual void connected(const ErrorCode &cause = ErrorCode::IPC_ERR_SUCCESS) {}
+
+    /**
+     * @brief Connection loss callback function
+     * 
+     * @param cause 
+     */
 	virtual void connection_lost(const ErrorCode &cause = ErrorCode::IPC_ERR_SUCCESS) {}
+
+    /**
+     * @brief Message arrival callback function
+     * 
+     */
 	virtual void message_arrived(const Buffer *buf /*msg*/) {}
+
+    /**
+     * @brief Message arrival callback function
+     * 
+     */
+    virtual void message_arrived(const ErrorCode &cause = ErrorCode::IPC_ERR_SUCCESS) {}
+
+    /**
+     * @brief Message sending callback function
+     * 
+     * @param cause 
+     */
 	virtual void delivery_complete(const ErrorCode &cause = ErrorCode::IPC_ERR_SUCCESS) {}
 };
 

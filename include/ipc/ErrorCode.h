@@ -8,6 +8,7 @@ namespace ipc {
 enum class ErrorCode : uint8_t
 {
 	IPC_ERR_SUCCESS = 0,
+    IPC_ERR_NOINIT,
 	IPC_ERR_NOMEM,
 	IPC_ERR_INVAL,
 	IPC_ERR_NO_CONN,

@@ -17,7 +17,6 @@ class Ipc
 {
 public:
     Ipc() noexcept = default;
-
     explicit Ipc(char const * name, const unsigned &mode = SENDER);
     Ipc(Ipc&& rhs) noexcept;
 
@@ -38,6 +37,8 @@ public:
     void disconnect();
 
     void set_callback(CallbackPtr);
+
+    bool is_connected() const noexcept;
 
     bool write(void const * data, std::size_t size);
 
