@@ -50,7 +50,7 @@ if (LIBIPC_BUILD_TESTS)
     else()
         set(gtest_force_shared_crt ON)
     endif()
-    add_subdirectory(3rdparty/gtest)
+    add_subdirectory(3rdparty/googletest)
     add_subdirectory(test)
 endif()
 
