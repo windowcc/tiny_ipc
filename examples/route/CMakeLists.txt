@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16.3)
-project(send_recv VERSION 1 LANGUAGES CXX)
+project(route VERSION 1 LANGUAGES CXX)
 
 file(GLOB IPC_EXAMPLE_SOURCES_CXX "*.cxx")
 file(GLOB IPC_EXAMPLE_SOURCES_CPP "*.cpp")

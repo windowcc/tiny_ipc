@@ -53,25 +53,24 @@ private:
     std::unique_ptr<IpcImpl> impl_;
 };
 
+/**
+ * @brief channel
+ * 
+ * @note You could use multi writers for sending messages to a route,
+ *       then all the readers which are receiving with this route, would receive your sent messages.
+ *       A route could be used in N to N .
+ */
+using Route = Ipc<Wr<Transmission::BROADCAST>>;
+
 
 /**
- * \class route
- *
- * \note You could use one producer/server/sender for sending messages to a route,
- *       then all the consumers/clients/receivers which are receiving with this route,
- *       would receive your sent messages.
- *       A route could only be used in 1 to N (one producer/writer to multi consumers/readers).
-*/
-// using Route = Ipc<Wr<Relation::SINGLE, Relation::MULTI, Transmission::BROADCAST>>;
-
-/**
- * \class channel
- *
- * \note You could use multi producers/writers for sending messages to a channel,
- *       then all the consumers/readers which are receiving with this channel,
- *       would receive your sent messages.
-*/
-using Channel = Ipc<Wr<Relation::MULTI, Relation::SINGLE, Transmission::UNICAST>>;
+ * @brief channel
+ * 
+ * @note You could use multi writers for sending messages to a channel,
+ *       then only reader which are receiving with this channel, would receive your sent messages.
+ *       A channel could only be used in N to 1 .
+ */
+using Channel = Ipc<Wr<Transmission::UNICAST>>;
 
 } // namespace ipc
 

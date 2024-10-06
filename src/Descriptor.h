@@ -9,7 +9,7 @@ namespace ipc
 namespace detail
 {
 
-class alignas(alignof(std::max_align_t)) Descriptor
+class Descriptor
 {
 public:
     Descriptor();

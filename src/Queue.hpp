@@ -21,37 +21,39 @@ public:
     QueueConn(const QueueConn &) = delete;
     QueueConn &operator=(const QueueConn &) = delete;
 
-    bool connected() const noexcept
-    {
-        return connected_ != 0;
-    }
-
+public:
     uint32_t connected_id() const noexcept
     {
-        return connected_;
+        return connected_id_;
     }
-
+    
     template <typename Segment>
-    auto connect(Segment *segment) noexcept
-        -> std::tuple<bool, bool, decltype(std::declval<Segment>().cursor())>
+    auto connect(Segment *segment, unsigned mode = RECEIVER) noexcept
+        -> std::tuple<bool, bool, decltype(std::declval<Segment>().rd())>
     {
         if (segment == nullptr)
+        {
             return {};
+        }
         // if it's already connected, just return
-        if (connected())
-            return {connected(), false, 0};
-        connected_ = segment->connect_receiver();
-        return {connected(), true, segment->cursor()};
+        if (connected_id())
+        {
+            return {connected_id(), false, 0};
+        }
+
+        connected_id_ = segment->connect(mode);
+        return {connected_id(), true, segment->rd()};
     }
 
     template <typename Segment>
     bool disconnect(Segment *segment) noexcept
     {
-        if (segment == nullptr)
+        if (segment == nullptr || !connected_id())
+        {
             return false;
-        if (!connected())
-            return false;
-        segment->disconnect_receiver(std::exchange(connected_, 0));
+        }
+
+        segment->disconnect(RECEIVER, std::exchange(connected_id_, 0));
         return true;
     }
 
@@ -82,31 +84,21 @@ protected:
     }
 
 protected:
-    uint32_t connected_ = 0;
+    uint32_t connected_id_ = 0;
     Handle handle_;
 };
 
 template <typename Segment>
 class QueueBase : public QueueConn
 {
-    using base_t = QueueConn;
 public:
     using segment_t = Segment;
-    using base_t::base_t;
-
     QueueBase() = default;
 
     explicit QueueBase(char const *name)
         : QueueBase{}
     {
         segment_ = QueueConn::template open<segment_t>(name);
-    }
-
-    explicit QueueBase(segment_t *segment) noexcept
-        : QueueBase{}
-    {
-        assert(segment != nullptr);
-        segment_ = segment;
     }
 
     virtual ~QueueBase()
@@ -116,49 +108,29 @@ public:
         {
             segment_->waiter().close();
         }
-        base_t::close();
+        QueueConn::close();
     }
 
 public:
     bool open(char const *name) noexcept
     {
-        base_t::close();
+        QueueConn::close();
         segment_ = QueueConn::template open<segment_t>(name);
         return segment_ != nullptr;
     }
 
-    segment_t *elems() noexcept
+    segment_t *segment() noexcept
     { 
         return segment_;
     }
 
-    segment_t const *elems() const noexcept
+    bool connect(unsigned mode = RECEIVER) noexcept
     {
-        return segment_;
-    }
-
-    bool ready_sending() noexcept
-    {
-        if (segment_ == nullptr)
-            return false;
-        return sender_flag_ || (sender_flag_ = segment_->connect_sender());
-    }
-
-    void shut_sending() noexcept
-    {
-        if (segment_ == nullptr)
-            return;
-        if (!sender_flag_)
-            return;
-        segment_->disconnect_sender();
-    }
-
-    bool connect() noexcept
-    {
-        auto tp = base_t::connect(segment_);
+        auto tp = QueueConn::connect(segment_,mode);
         if (std::get<0>(tp) && std::get<1>(tp))
         {
             cursor_ = std::get<2>(tp);
+            sender_flag_ = true;
             return true;
         }
         return std::get<0>(tp);
@@ -166,12 +138,15 @@ public:
 
     bool disconnect() noexcept
     {
-        return base_t::disconnect(segment_);
-    }
+        if (segment_ == nullptr || !connected_id())
+        {
+            return false;
+        }
 
-    std::size_t conn_count() const noexcept
-    {
-        return (segment_ == nullptr) ? static_cast<std::size_t>(TimeOut::DEFAULT_TIMEOUT) : segment_->conn_count();
+        segment_->disconnect(RECEIVER, std::exchange(connected_id_, 0));
+        sender_flag_ = false;
+
+        return true;
     }
 
     bool valid() const noexcept
@@ -181,10 +156,10 @@ public:
 
     bool empty() const noexcept
     {
-        return !valid() || (cursor_ == segment_->cursor());
+        return !valid() || (cursor_ == segment_->wr());
     }
 
-    template <typename Msg, typename... P>
+    template <typename Descriptor, typename... P>
     bool push(P &&...params)
     {
         if (segment_ == nullptr)
@@ -193,20 +168,20 @@ public:
         }
         return segment_->push(this, [&](void *p)
         {
-            ::new (p) Msg(std::forward<P>(params)...);
+            ::new (p) Descriptor(std::forward<P>(params)...);
         });
     }
 
-    template <typename Msg, typename F>
-    bool pop(Msg &item, F &&out)
+    template <typename Descriptor, typename F>
+    bool pop(Descriptor &item, F &&out)
     {
         if (segment_ == nullptr)
         {
             return false;
         }
-        return segment_->pop(this, &cursor_, [&item](void *p)
+        return segment_->pop(this, cursor_, [&item](void *p)
         {
-            ::new (&item) Msg(std::move(*static_cast<Msg *>(p)));
+            ::new (&item) Descriptor(std::move(*static_cast<Descriptor *>(p)));
         }, std::forward<F>(out));
     }
 
@@ -215,36 +190,29 @@ public:
         return &(segment_->waiter());
     }
 
-protected:
-    segment_t *segment_ = nullptr;
-protected:
-    decltype(std::declval<segment_t>().cursor()) cursor_ = 0;
+private:
+    // It is used to record the actual read subscript of the object currently being read.
+    decltype(std::declval<segment_t>().rd()) cursor_ = 0;
     bool sender_flag_ = false;
+    segment_t *segment_ = nullptr;
 };
 
 } // namespace detail
 
-template <typename Msg, typename Choose>
-class Queue final : public detail::QueueBase<typename Choose::template segment_t<sizeof(Msg), alignof(Msg)>>
+template <typename Descriptor, typename Choose>
+class Queue final : public detail::QueueBase<typename Choose::template segment_t<sizeof(Descriptor), alignof(Descriptor)>>
 {
-    using base_t = detail::QueueBase<typename Choose::template segment_t<sizeof(Msg), alignof(Msg)>>;
+    using base_t = detail::QueueBase<typename Choose::template segment_t<sizeof(Descriptor), alignof(Descriptor)>>;
 
 public:
-    using base_t::base_t;
-
     template <typename... P>
     bool push(P &&...params)
     {
-        return base_t::template push<Msg>(std::forward<P>(params)...);
-    }
-
-    bool pop(Msg &item)
-    {
-        return base_t::pop(item, [](bool) {});
+        return base_t::template push<Descriptor>(std::forward<P>(params)...);
     }
 
     template <typename F>
-    bool pop(Msg &item, F &&out)
+    bool pop(Descriptor &item, F &&out)
     {
         return base_t::pop(item, std::forward<F>(out));
     }

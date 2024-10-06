@@ -12,7 +12,7 @@ class Buffer;
 /////////////////////////////////////////////////////////////////////////////
 
 /**
- * Provides a mechanism for tracking the completion of an asynchronous
+ * @brief Provides a mechanism for tracking the completion of an asynchronous
  * action.
  */
 class IPC_EXPORT Callback

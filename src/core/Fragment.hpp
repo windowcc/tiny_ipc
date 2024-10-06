@@ -1,9 +1,11 @@
 #ifndef _IPC_CORE_FRAGMENT_H_
 #define _IPC_CORE_FRAGMENT_H_
 
+#include <config.h>
 #include <thread>
 #include <sstream>
 #include <memory>
+#include <functional>
 #include <iostream>
 #include <unordered_map>
 #include <memory_resource>
@@ -34,31 +36,26 @@ static std::string thread_id_to_string(const std::thread::id &id)
 class FragmentBase
 {
 public:
-    FragmentBase()
-    {
-    }
-
-    virtual ~FragmentBase()
-    {
-    };
+    FragmentBase() = default;
+    virtual ~FragmentBase() = default;
 
 public:
     virtual bool init() = 0;
     // SENDER
-    virtual Descriptor write(void const *data, const std::size_t &size,const uint32_t &cnt = DEFAULT_WRITE_CNT)
+    virtual Descriptor write(void const *data, const std::size_t &size,const uint32_t &cnt)
     {
         return {};
     }
 
     // RECEIVER
-    virtual Buffer read(const Descriptor &desc)
+    virtual bool read(const Descriptor &desc, std::function<void(const Buffer *)> callbacK)
     {
         return {};
     }
 };
 
 template<unsigned>
-class Fragment{};
+class Fragment;
 
 
 // Just need to add a lock on the writer end
@@ -113,7 +110,7 @@ public:
         return true;
     }
 
-    virtual Descriptor write(void const *data, const std::size_t &size,const uint32_t &cnt = DEFAULT_WRITE_CNT) final
+    virtual Descriptor write(void const *data, const std::size_t &size,const uint32_t &cnt) final
     {
         recyle_memory();
 
@@ -149,7 +146,6 @@ public:
     }
 
 private:
-
     void recyle_memory()
     {
         if(map_.empty())
@@ -203,24 +199,22 @@ public:
         return true;
     }
 
-    virtual Buffer read(const Descriptor &desc) final
+    virtual bool read(const Descriptor &desc, std::function<void(const Buffer *)> callback) final
     {
         Handle *handle = get_handle(desc.id());
-        if(handle == nullptr)
+        if(!handle || !callback)
         {
-            return Buffer{};
+            return false;
         }
         void *pool_data = static_cast<char*>(handle->get()) + desc.offset();
 
-        return std::move(Buffer(static_cast<char*>(pool_data) + sizeof(uint32_t), 
-            desc.length() - sizeof(uint32_t), [](void *p, std::size_t size) -> void
-        {
-            (void)size;
-            std::atomic<uint32_t> *cnt  =  static_cast<std::atomic<uint32_t>*>(
-                            static_cast<void*>(static_cast<char*>(p) - sizeof(uint32_t)));
-
-            cnt->fetch_sub(1, std::memory_order_relaxed);
-        }));
+        Buffer buf(static_cast<char*>(pool_data) + sizeof(uint32_t), desc.length() - sizeof(uint32_t));
+        if(!buf.empty())
+        { 
+            callback(&buf);
+        }
+        static_cast<std::atomic<uint32_t>*>(pool_data)->fetch_sub(1, std::memory_order_acquire);
+        return !static_cast<std::atomic<uint32_t>*>(pool_data)->load(std::memory_order_release);
     }
 private:
 

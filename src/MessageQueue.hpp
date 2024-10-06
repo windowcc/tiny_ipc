@@ -14,25 +14,21 @@ template <typename Choose>
 class MessageQueue
 {
 public:
-    using queue_t = Queue<Descriptor, Choose>;
-public:
     explicit MessageQueue(char const *prefix, char const *name)
         : prefix_{make_string(prefix)}
         , name_{make_string(name)}
-        { 
-            // init();
-        }
+    { 
+    }
+
     ~MessageQueue()
     {
-
     }
 public:
     bool init()
     {
         if (!queue_.valid())
         {
-            if(queue_.open(make_prefix(prefix_,
-                {to_string(sizeof(Descriptor)), "_",to_string(alignof(std::max_align_t)), "_",this->name_}).c_str()))
+            if(!queue_.open(make_prefix(prefix_,{"_",this->name_}).c_str()))
             {
                 return false;
             }
@@ -50,7 +46,7 @@ public:
         return name_;
     }
 
-    inline queue_t *queue()
+    inline auto *queue()
     {
         return &queue_;
     }
@@ -72,9 +68,9 @@ public:
         queue_.disconnect();
     }
 private:
-    string prefix_;
-    string name_;
-    queue_t queue_;
+    std::string prefix_;
+    std::string name_;
+    Queue<Descriptor, Choose> queue_;
 };
 
 
