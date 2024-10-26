@@ -81,28 +81,6 @@ inline void yield(K &k) noexcept
     ++k;
 }
 
-template <std::size_t N = 32, typename K, typename F>
-inline void sleep(K &k, F &&f)
-{
-    if (k < static_cast<K>(N))
-    {
-        std::this_thread::yield();
-    }
-    else
-    {
-        static_cast<void>(std::forward<F>(f)());
-        return;
-    }
-    ++k;
-}
-
-template <std::size_t N = 32, typename K>
-inline void sleep(K &k)
-{
-    sleep<N>(k, []
-                { std::this_thread::sleep_for(std::chrono::milliseconds(1)); });
-}
-
 } // namespace ipc
 
 #pragma pop_macro("IPC_LOCK_PAUSE_")

@@ -7,6 +7,7 @@
 #include <Handle.h>
 #include <sync/RwLock.h>
 #include <Resource.hpp>
+#include <sync/Waiter.h>
 
 namespace ipc
 {
@@ -20,37 +21,39 @@ public:
     QueueConn(const QueueConn &) = delete;
     QueueConn &operator=(const QueueConn &) = delete;
 
-    bool connected() const noexcept
-    {
-        return connected_ != 0;
-    }
-
+public:
     uint32_t connected_id() const noexcept
     {
-        return connected_;
+        return connected_id_;
     }
-
+    
     template <typename Segment>
-    auto connect(Segment *elems) noexcept
-        -> std::tuple<bool, bool, decltype(std::declval<Segment>().cursor())>
+    auto connect(Segment *segment, unsigned mode = RECEIVER) noexcept
+        -> std::tuple<bool, bool, decltype(std::declval<Segment>().rd())>
     {
-        if (elems == nullptr)
+        if (segment == nullptr)
+        {
             return {};
+        }
         // if it's already connected, just return
-        if (connected())
-            return {connected(), false, 0};
-        connected_ = elems->connect_receiver();
-        return {connected(), true, elems->cursor()};
+        if (connected_id())
+        {
+            return {connected_id(), false, 0};
+        }
+
+        connected_id_ = segment->connect(mode);
+        return {connected_id(), true, segment->rd()};
     }
 
     template <typename Segment>
-    bool disconnect(Segment *elems) noexcept
+    bool disconnect(Segment *segment) noexcept
     {
-        if (elems == nullptr)
+        if (segment == nullptr || !connected_id())
+        {
             return false;
-        if (!connected())
-            return false;
-        elems->disconnect_receiver(std::exchange(connected_, 0));
+        }
+
+        segment->disconnect(RECEIVER, std::exchange(connected_id_, 0));
         return true;
     }
 
@@ -66,13 +69,13 @@ protected:
         {
             return nullptr;
         }
-        auto elems = static_cast<Segment *>(handle_.get());
-        if (elems == nullptr)
+        auto segment = static_cast<Segment *>(handle_.get());
+        if (segment == nullptr)
         {
             return nullptr;
         }
-        elems->init();
-        return elems;
+        segment->init();
+        return segment;
     }
 
     void close()
@@ -80,78 +83,54 @@ protected:
         handle_.release();
     }
 
-private:
-    uint32_t connected_ = 0;
+protected:
+    uint32_t connected_id_ = 0;
     Handle handle_;
 };
 
 template <typename Segment>
 class QueueBase : public QueueConn
 {
-    using base_t = QueueConn;
 public:
-    using elems_t = Segment;
-    using base_t::base_t;
-
+    using segment_t = Segment;
     QueueBase() = default;
 
     explicit QueueBase(char const *name)
         : QueueBase{}
     {
-        elems_ = QueueConn::template open<elems_t>(name);
+        segment_ = QueueConn::template open<segment_t>(name);
     }
 
-    explicit QueueBase(elems_t *elems) noexcept
-        : QueueBase{}
+    virtual ~QueueBase()
     {
-        assert(elems != nullptr);
-        elems_ = elems;
+
+        if(handle_.ref() <= 1)
+        {
+            segment_->waiter().close();
+        }
+        QueueConn::close();
     }
 
-    ~QueueBase()
-    {
-        base_t::close();
-    }
-
+public:
     bool open(char const *name) noexcept
     {
-        base_t::close();
-        elems_ = QueueConn::template open<elems_t>(name);
-        return elems_ != nullptr;
+        QueueConn::close();
+        segment_ = QueueConn::template open<segment_t>(name);
+        return segment_ != nullptr;
     }
 
-    elems_t *elems() noexcept
+    segment_t *segment() noexcept
     { 
-        return elems_;
+        return segment_;
     }
 
-    elems_t const *elems() const noexcept
+    bool connect(unsigned mode = RECEIVER) noexcept
     {
-        return elems_;
-    }
-
-    bool ready_sending() noexcept
-    {
-        if (elems_ == nullptr)
-            return false;
-        return sender_flag_ || (sender_flag_ = elems_->connect_sender());
-    }
-
-    void shut_sending() noexcept
-    {
-        if (elems_ == nullptr)
-            return;
-        if (!sender_flag_)
-            return;
-        elems_->disconnect_sender();
-    }
-
-    bool connect() noexcept
-    {
-        auto tp = base_t::connect(elems_);
+        auto tp = QueueConn::connect(segment_,mode);
         if (std::get<0>(tp) && std::get<1>(tp))
         {
             cursor_ = std::get<2>(tp);
+            sender_flag_ = true;
             return true;
         }
         return std::get<0>(tp);
@@ -159,79 +138,81 @@ public:
 
     bool disconnect() noexcept
     {
-        return base_t::disconnect(elems_);
-    }
+        if (segment_ == nullptr || !connected_id())
+        {
+            return false;
+        }
 
-    std::size_t conn_count() const noexcept
-    {
-        return (elems_ == nullptr) ? static_cast<std::size_t>(TimeOut::DEFAULT_TIMEOUT) : elems_->conn_count();
+        segment_->disconnect(RECEIVER, std::exchange(connected_id_, 0));
+        sender_flag_ = false;
+
+        return true;
     }
 
     bool valid() const noexcept
     {
-        return elems_ != nullptr;
+        return segment_ != nullptr;
     }
 
     bool empty() const noexcept
     {
-        return !valid() || (cursor_ == elems_->cursor());
+        return !valid() || (cursor_ == segment_->wr());
     }
 
-    template <typename Msg, typename... P>
+    template <typename Descriptor, typename... P>
     bool push(P &&...params)
     {
-        if (elems_ == nullptr)
+        if (segment_ == nullptr)
         {
             return false;
         }
-        return elems_->push(this, [&](void *p)
+        return segment_->push(this, [&](void *p)
         {
-            ::new (p) Msg(std::forward<P>(params)...);
+            ::new (p) Descriptor(std::forward<P>(params)...);
         });
     }
 
-    template <typename Msg, typename F>
-    bool pop(Msg &item, F &&out)
+    template <typename Descriptor, typename F>
+    bool pop(Descriptor &item, F &&out)
     {
-        if (elems_ == nullptr)
+        if (segment_ == nullptr)
         {
             return false;
         }
-        return elems_->pop(this, &(this->cursor_), [&item](void *p)
+        return segment_->pop(this, cursor_, [&item](void *p)
         {
-            ::new (&item) Msg(std::move(*static_cast<Msg *>(p)));
+            ::new (&item) Descriptor(std::move(*static_cast<Descriptor *>(p)));
         }, std::forward<F>(out));
     }
 
-public:
-    elems_t *elems_ = nullptr;
-    decltype(std::declval<elems_t>().cursor()) cursor_ = 0;
+    inline Waiter *waiter() noexcept
+    {
+        return &(segment_->waiter());
+    }
+
+private:
+    // It is used to record the actual read subscript of the object currently being read.
+    decltype(std::declval<segment_t>().rd()) cursor_ = 0;
     bool sender_flag_ = false;
+    segment_t *segment_ = nullptr;
 };
 
 } // namespace detail
 
-template <typename Msg, typename Choose>
-class Queue final : public detail::QueueBase<typename Choose::template elems_t<sizeof(Msg), alignof(Msg)>>
+template <typename Descriptor, typename Choose>
+class Queue final : public detail::QueueBase<typename Choose::template segment_t<sizeof(Descriptor), alignof(Descriptor)>>
 {
-    using base_t = detail::QueueBase<typename Choose::template elems_t<sizeof(Msg), alignof(Msg)>>;
+    using base_t = detail::QueueBase<typename Choose::template segment_t<sizeof(Descriptor), alignof(Descriptor)>>;
 
-public:
-    using base_t::base_t;
 public:
     template <typename... P>
     bool push(P &&...params)
     {
-        return base_t::template push<Msg>(std::forward<P>(params)...);
-    }
-
-    bool pop(Msg &item)
-    {
-        return base_t::pop(item, [](bool) {});
+        return base_t::template push<Descriptor>(std::forward<P>(params)...);
     }
 
     template <typename F>
-    bool pop(Msg &item, F &&out)
+    bool pop(Descriptor &item, F &&out)
     {
         return base_t::pop(item, std::forward<F>(out));
     }

@@ -1,6 +1,7 @@
 #include <sync/Condition.h>
 #include <sync/ScopeGuard.h>
 #include <cstring>
+#include <sync/Mutex.h>
 
 namespace ipc
 {
@@ -10,23 +11,32 @@ namespace detail
 Condition::Condition()
     : cond_()
 {
-    init();
 }
 
-Condition::~Condition()
+pthread_cond_t const *Condition::native() const noexcept
 {
-    // close();
+    return &cond_;
+}
+
+pthread_cond_t *Condition::native() noexcept
+{
+    return &cond_;
+}
+
+bool Condition::valid() const noexcept
+{
+    static const char tmp[sizeof(pthread_cond_t)]{};
+    return (std::memcmp(tmp, &cond_, sizeof(pthread_cond_t)) != 0);
 }
 
 bool Condition::init() noexcept
 {
-    // close();
-    // ::pthread_cond_destroy(&cond_);
-
-    // auto finally = Guard([this]
-    // {
-    //     close(); 
-    // }); // close when failed
+    close();
+    ::pthread_cond_destroy(&cond_);
+    auto finally = Guard([this]
+    {
+        close(); 
+    }); // close when failed
 
     // init Condition
     int eno;
@@ -49,13 +59,8 @@ bool Condition::init() noexcept
     {
         return false;
     }
-
-    if((eno = ::pthread_condattr_destroy(&cond_attr)) != 0)
-    {
-        return false;
-    }
-    // finally.dismiss();
-    return true;
+    finally.dismiss();
+    return valid();
 }
 
 void Condition::close() noexcept
@@ -68,6 +73,8 @@ void Condition::close() noexcept
 
 bool Condition::wait(Mutex &mtx, std::uint64_t tm) noexcept
 {
+    if (!valid())
+        return false;
     switch (tm)
     {
     case static_cast<long unsigned int>(TimeOut::INVALID_TIMEOUT):
@@ -98,6 +105,8 @@ bool Condition::wait(Mutex &mtx, std::uint64_t tm) noexcept
 
 bool Condition::notify(Mutex &) noexcept
 {
+    if (!valid())
+        return false;
     int eno;
     if ((eno = ::pthread_cond_signal(&cond_)) != 0)
     {
@@ -108,6 +117,8 @@ bool Condition::notify(Mutex &) noexcept
 
 bool Condition::broadcast(Mutex &) noexcept
 {
+    if (!valid())
+        return false;
     int eno;
     if ((eno = ::pthread_cond_broadcast(&cond_)) != 0)
     {
@@ -115,7 +126,6 @@ bool Condition::broadcast(Mutex &) noexcept
     }
     return true;
 }
-
 
 } // namespace detail
 } // namespace ipc

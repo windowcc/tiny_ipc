@@ -6,6 +6,7 @@
 #include <atomic>
 #include <sync/Mutex.h>
 #include <sync/Condition.h>
+#include <iostream>
 
 namespace ipc
 {
@@ -18,6 +19,12 @@ public:
     Waiter();
     ~Waiter();
 public:
+    bool valid() const noexcept;
+
+    bool init() noexcept;
+
+    void close() noexcept;
+
     bool notify() noexcept;
 
     bool broadcast() noexcept;
@@ -25,25 +32,21 @@ public:
     bool quit();
 
     template <typename F>
-    bool wait_for(F &&pred, std::uint64_t tm = static_cast<uint64_t>(TimeOut::INVALID_TIMEOUT)) noexcept
+    void wait_for(F &&pred, std::uint64_t tm = static_cast<uint64_t>(TimeOut::DEFAULT_TIMEOUT)) noexcept
     {
         std::lock_guard<Mutex> guard{ mutex_ };
-        while ([this, &pred]
+        if (tm && !cond_.wait(mutex_, tm))
         {
-            return !quit_.load(std::memory_order_relaxed) && std::forward<F>(pred)();
-        }())
-        
-        {
-            if (!cond_.wait(mutex_, tm))
-                return false;
+            // std::cerr << "Condition wait has a error." << std::endl;
+            return;
         }
-        return true;
+
+        std::forward<F>(pred)(); 
     }
 
 private:
-    Condition cond_;
     Mutex mutex_;
-    std::atomic<bool> quit_;
+    Condition cond_;
 };
 
 } // namespace detail

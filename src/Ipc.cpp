@@ -1,29 +1,37 @@
 #include <ipc/Ipc.h>
 #include <shared_mutex>
 #include <Handle.h>
-#include <PoolAlloc.h>
 #include <MessageQueue.hpp>
 #include <Choose.hpp>
-#include <fragment/Fragment.hpp>
-#include <circ/Segment.hpp>
+#include <ipc/Callback.h>
+#include <core/Fragment.hpp>
+#include <core/Segment.hpp>
 
 using namespace ipc::detail;
 
 namespace ipc
 {
 
-#define handle_impl         (impl_->handle)
-#define fragment_impl       (impl_->fragment)
-#define mode_impl           (impl_->mode)
-#define connected_impl      (impl_->connected)
+namespace
+{
+    #define HANDLE         (impl_->handle)
+    #define FRAGMENT       (impl_->fragment)
+    #define MODE           (impl_->mode)
+    #define CONNECTED      (impl_->connected)
+    #define CALLBACK       (impl_->callback)
+} // internal-linkage
+
+
+
 template<typename Wr>
 struct Ipc<Wr>::IpcImpl
 {
     // 用于发送描述信息
     std::shared_ptr<MessageQueue<Choose<Segment, Wr>> > handle { nullptr };
-    std::shared_ptr<FragmentBase> fragment {nullptr};
+    std::unique_ptr<FragmentBase> fragment {nullptr};
     unsigned mode { SENDER };
-    bool connected { false };
+    std::atomic_bool connected { false };
+    CallbackPtr callback {nullptr};
 };
 
 template <typename Wr>
@@ -56,19 +64,19 @@ Ipc<Wr>& Ipc<Wr>::operator=(Ipc<Wr> rhs) noexcept
 template <typename Wr>
 char const * Ipc<Wr>::name() const noexcept
 {
-    return (handle_impl == nullptr) ? nullptr : handle_impl->name().c_str();
+    return (HANDLE == nullptr) ? nullptr : HANDLE->name().c_str();
 }
 
 template <typename Wr>
 bool Ipc<Wr>::valid() const noexcept
 {
-    return (handle_impl != nullptr);
+    return (HANDLE != nullptr);
 }
 
 template <typename Wr>
 unsigned Ipc<Wr>::mode() const noexcept
 {
-    return mode_impl;
+    return MODE;
 }
 
 template <typename Wr>
@@ -76,45 +84,49 @@ bool Ipc<Wr>::connect(char const * name, const unsigned &mode)
 {
     if (name == nullptr || name[0] == '\0')
     {
+        if(CALLBACK)
+        {
+            CALLBACK->connected(ErrorCode::IPC_ERR_NOINIT);
+        }
         return false;
     }
+
     switch (mode)
     {
     case static_cast<unsigned>(SENDER):
-        {
-            std::shared_ptr<FragmentBase> tmp(new Fragment<SENDER>(),[](FragmentBase *ptr){
-                delete (static_cast<Fragment<SENDER>*>(ptr));
-            });
-            fragment_impl.swap(tmp);
-        }
+        FRAGMENT = std::make_unique<Fragment<SENDER>>();
         break;
     case static_cast<unsigned>(RECEIVER):
-        {
-            std::shared_ptr<FragmentBase> tmp(new Fragment<RECEIVER>(),[](FragmentBase *ptr){
-                    delete (static_cast<Fragment<RECEIVER>*>(ptr));
-                });
-            fragment_impl.swap(tmp);
-        }
+        FRAGMENT = std::make_unique<Fragment<RECEIVER>>();
         break;
     default:
         break;
     }
-    if(!fragment_impl->init())
+
+    if(!FRAGMENT->init())
     {
+        if(CALLBACK)
+        {
+            CALLBACK->connected(ErrorCode::IPC_ERR_NOINIT);
+        }
         return false;
     }
 
     disconnect();
     if(!valid())
     {
-        handle_impl = std::make_shared<MessageQueue<Choose<Segment, Wr>> >(nullptr,name);
-        if(handle_impl->init())
+        HANDLE = std::make_shared<MessageQueue<Choose<Segment, Wr>> >(nullptr,name);
+        if(!HANDLE->init())
         {
+            if(CALLBACK)
+            {
+                CALLBACK->connected(ErrorCode::IPC_ERR_NOINIT);
+            }
             return false;
         }
     }
-    mode_impl = mode;
-    return connected_impl = reconnect(mode);
+    MODE = mode;
+    return CONNECTED = reconnect(mode);
 }
 
 template <typename Wr>
@@ -122,36 +134,70 @@ bool Ipc<Wr>::reconnect(unsigned mode)
 {
     if (!valid())
     {
+        if(CALLBACK)
+        {
+            CALLBACK->connected(ErrorCode::IPC_ERR_INVAL);
+        }
         return false;
     }
-    if (connected_impl && (mode_impl == mode))
+    if (CONNECTED && (MODE == mode))
     {
+        if(CALLBACK)
+        {
+            CALLBACK->connected();
+        }
         return true;
     }
 
-    auto que = handle_impl->queue();
+    auto que = HANDLE->queue();
     if (que == nullptr)
     {
-        return false;
-    }
-
-    handle_impl->init();
-
-    if (mode & RECEIVER)
-    {
-        que->shut_sending();
-        if (que->connect())
+        if(CALLBACK)
         {
-            return true;
+            CALLBACK->connected(ErrorCode::IPC_ERR_NOMEM);
         }
         return false;
     }
 
-    if (que->connected())
+    if(!(HANDLE->init()))
     {
-        handle_impl->disconnect();
+        if(CALLBACK)
+        {
+            CALLBACK->connected(ErrorCode::IPC_ERR_NOINIT);
+        }
+        return false;
     }
-    return que->ready_sending();
+
+    if (mode & RECEIVER)
+    {
+        que->disconnect();
+        if (que->connect())
+        {
+            if(CALLBACK)
+            {
+                CALLBACK->connected();
+            }
+            return true;
+        }
+
+        if(CALLBACK)
+        {
+            CALLBACK->connected(ErrorCode::IPC_ERR_NOINIT);
+        }
+        return false;
+    }
+
+    if (que->connected_id())
+    {
+        HANDLE->disconnect();
+    }
+
+    if(CALLBACK)
+    {
+        CALLBACK->connected();
+    }
+
+    return que->connect(mode);
 }
 
 template <typename Wr>
@@ -159,18 +205,45 @@ void Ipc<Wr>::disconnect()
 {
     if (!valid())
     {
+        if(CALLBACK)
+        {
+            CALLBACK->connection_lost(ErrorCode::IPC_ERR_NOMEM);
+        }
         return;
     }
-
-    auto que = handle_impl->queue();
+    auto que = HANDLE->queue();
     if (que == nullptr)
     {
+        if(CALLBACK)
+        {
+            CALLBACK->connection_lost(ErrorCode::IPC_ERR_NOMEM);
+        }
         return;
     }
-    que->shut_sending();
-    assert((handle_impl) != nullptr);
-    handle_impl->disconnect();
-    connected_impl = false;
+    CONNECTED = false;
+    que->disconnect();
+    assert((HANDLE) != nullptr);
+    HANDLE->disconnect();
+
+    if(CALLBACK)
+    {
+        CALLBACK->connection_lost();
+    }
+}
+
+template <typename Wr>
+void Ipc<Wr>::set_callback(CallbackPtr callback)
+{
+    if(!CALLBACK)
+    {
+        CALLBACK = callback;
+    }
+}
+
+template <typename Wr>
+bool Ipc<Wr>::is_connected() const noexcept
+{
+    return CONNECTED;
 }
 
 template <typename Wr>
@@ -178,38 +251,41 @@ bool Ipc<Wr>::write(void const *data, std::size_t size)
 {
     if (!valid() || data == nullptr || size == 0)
     {
+        if(CALLBACK)
+        {
+            CALLBACK->delivery_complete(ErrorCode::IPC_ERR_NOINIT);
+        }
         return false;
     }
-    auto que = handle_impl->queue();
-    if (que == nullptr)
+    auto que = HANDLE->queue();
+    if (que == nullptr || que->segment() == nullptr || !que->connect() ||
+            !(que->segment()->connections(std::memory_order_relaxed)))
     {
-        return false;
-    }
-    if (que->elems() == nullptr)
-    {
-        return false;
-    }
-    if (!que->ready_sending())
-    {
-        return false;
-    }
-    uint32_t conns = que->elems()->connections(std::memory_order_relaxed);
-    if (conns == 0)
-    {
+        if(CALLBACK)
+        {
+            CALLBACK->delivery_complete(ErrorCode::IPC_ERR_NOMEM);
+        }
         return false;
     }
 
-    auto desc = fragment_impl->write(data,size);
-    if(!desc.valid())
+    auto desc = FRAGMENT->write(data,size,que->segment()->recv_count());
+    if(!desc.length() || !que->push(desc))
     {
+        if(CALLBACK)
+        {
+            CALLBACK->delivery_complete(ErrorCode::IPC_ERR_INVAL);
+        }
         return false;
+    }
+    
+    auto ret = Wr::is_broadcast ? 
+        HANDLE->waiter()->broadcast() : HANDLE->waiter()->notify();
+
+    if(!ret || CALLBACK)
+    {
+        CALLBACK->delivery_complete();
     }
 
-    if(!que->push(desc))
-    {
-        return false;
-    }
-    handle_impl->waiter()->broadcast();
     return true;
 }
 
@@ -233,45 +309,65 @@ static std::string thread_id_to_string(const std::thread::id &id)
 }
 
 template <typename Wr>
-Buffer Ipc<Wr>::read(std::uint64_t tm)
+void Ipc<Wr>::read(std::uint64_t tm)
 {
     if(!valid())
     {
-        return {};
+        if(CALLBACK)
+        {
+            CALLBACK->message_arrived(ErrorCode::IPC_ERR_NOMEM);
+        }
+        return ;
     }
-    auto que = handle_impl->queue();
+    auto que = HANDLE->queue();
     if (que == nullptr)
     {
-        return {};
+        if(CALLBACK)
+        {
+            CALLBACK->message_arrived(ErrorCode::IPC_ERR_NOMEM);
+        }
+        return ;
     }
-    if (!que->connected())
+    if (!que->connected_id())
     {
-        return {};
+        if(CALLBACK)
+        {
+            CALLBACK->message_arrived(ErrorCode::IPC_ERR_NO_CONN);
+        }
+        return ;
     }
-    auto inf = handle_impl;
-
     for (;;)
     {
-        // pop a new message
-        BufferDesc desc{};
-        if (!inf->wait_for([que, &desc]
+        if(!is_connected())
         {
-            return !que->pop(desc);
-        }, tm))
-        {
-            return {};
+            break;
         }
-        return std::move(fragment_impl->read(desc));
+
+        HANDLE->wait_for([&]
+        {
+            Descriptor desc{};
+            while(!que->empty())
+            {
+                if(!que->pop(desc,[&](bool) -> bool
+                {
+                    return FRAGMENT->read(desc,[&](const Buffer *buf) -> void
+                    {
+                        CALLBACK->message_arrived(buf);
+                    });
+                }))
+                {
+                    return;
+                }
+            }
+        }, tm);
     }
 }
 
 // UNICAST 一个通道对应一个Read
-template struct Ipc<Wr<Relation::SINGLE, Relation::SINGLE, Transmission::UNICAST>>;
-template struct Ipc<Wr<Relation::MULTI, Relation::SINGLE, Transmission::UNICAST>>;
+template struct Ipc<Wr<Transmission::UNICAST>>;
 
 // BROADCAST 一个通道对应多个Read
-template struct Ipc<Wr<Relation::SINGLE, Relation::MULTI, Transmission::BROADCAST>>;
-template struct Ipc<Wr<Relation::MULTI, Relation::MULTI, Transmission::BROADCAST>>;
+template struct Ipc<Wr<Transmission::BROADCAST>>;
 
 
 } // namespace ipc

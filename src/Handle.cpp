@@ -19,11 +19,6 @@ struct info_t
     std::atomic<std::int32_t> acc_;
 };
 
-constexpr std::size_t calc_size(std::size_t size)
-{
-    return ((((size - 1) / alignof(info_t)) + 1) * alignof(info_t)) + sizeof(info_t);
-}
-
 inline auto &acc_of(void *mem, std::size_t size)
 {
     return reinterpret_cast<info_t *>(static_cast<uint8_t *>(mem) + size - sizeof(info_t))->acc_;
@@ -209,7 +204,10 @@ void *Handle::get()
     }
     else
     {
-        size_ = calc_size(size_);
+        size_ = [](const std::size_t &size){
+            return ((((size - 1) / alignof(info_t)) + 1) * alignof(info_t)) + sizeof(info_t);
+        }(size_);
+
         if (::ftruncate(fd, static_cast<off_t>(size_)) != 0)
         {
             return nullptr;

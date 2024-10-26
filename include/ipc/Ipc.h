@@ -2,18 +2,21 @@
 #define _IPC_IPC_H_
 
 #include <string>
+#include <memory>
+#include <functional>
 #include <ipc/export.h>
 #include <ipc/def.h>
 #include <ipc/Buffer.h>
+#include <ipc/Callback.h>
 
 namespace ipc
 {
+
 template <typename Wr>
 class Ipc
 {
 public:
     Ipc() noexcept = default;
-
     explicit Ipc(char const * name, const unsigned &mode = SENDER);
     Ipc(Ipc&& rhs) noexcept;
 
@@ -33,38 +36,41 @@ public:
 
     void disconnect();
 
+    void set_callback(CallbackPtr);
+
+    bool is_connected() const noexcept;
+
     bool write(void const * data, std::size_t size);
 
     bool write(Buffer const & buff);
 
     bool write(std::string const & str);
 
-    Buffer read(std::uint64_t tm = static_cast<uint64_t>(TimeOut::INVALID_TIMEOUT));
+    void read(std::uint64_t tm = static_cast<uint64_t>(TimeOut::INVALID_TIMEOUT));
 
 private:
     struct IpcImpl;
     std::unique_ptr<IpcImpl> impl_;
 };
 
+/**
+ * @brief channel
+ * 
+ * @note You could use multi writers for sending messages to a route,
+ *       then all the readers which are receiving with this route, would receive your sent messages.
+ *       A route could be used in N to N .
+ */
+using Route = Ipc<Wr<Transmission::BROADCAST>>;
+
 
 /**
- * \class route
- *
- * \note You could use one producer/server/sender for sending messages to a route,
- *       then all the consumers/clients/receivers which are receiving with this route,
- *       would receive your sent messages.
- *       A route could only be used in 1 to N (one producer/writer to multi consumers/readers).
-*/
-// using Route = Ipc<Wr<Relation::SINGLE, Relation::MULTI, Transmission::BROADCAST>>;
-
-/**
- * \class channel
- *
- * \note You could use multi producers/writers for sending messages to a channel,
- *       then all the consumers/readers which are receiving with this channel,
- *       would receive your sent messages.
-*/
-using Channel = Ipc<Wr<Relation::MULTI, Relation::SINGLE, Transmission::UNICAST>>;
+ * @brief channel
+ * 
+ * @note You could use multi writers for sending messages to a channel,
+ *       then only reader which are receiving with this channel, would receive your sent messages.
+ *       A channel could only be used in N to 1 .
+ */
+using Channel = Ipc<Wr<Transmission::UNICAST>>;
 
 } // namespace ipc
 

@@ -43,7 +43,7 @@ private:
     int fd_ = -1;
     void *mem_ = nullptr;
     std::size_t size_ = 0;
-    ipc::string name_;
+    std::string name_;
 };
 
 } // namespace detail

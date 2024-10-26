@@ -2,7 +2,7 @@
 #define _IPC_CONNECT_INFO_H_
 
 #include <Queue.hpp>
-#include <BufferDesc.hpp>
+#include <Descriptor.h>
 #include <sync/Waiter.h>
 
 namespace ipc
@@ -14,25 +14,21 @@ template <typename Choose>
 class MessageQueue
 {
 public:
-    using queue_t = Queue<BufferDesc, Choose>;
-public:
     explicit MessageQueue(char const *prefix, char const *name)
         : prefix_{make_string(prefix)}
         , name_{make_string(name)}
-        { 
-            // init();
-        }
+    { 
+    }
+
     ~MessageQueue()
     {
-
     }
 public:
     bool init()
     {
         if (!queue_.valid())
         {
-            if(queue_.open(make_prefix(prefix_,
-                {"QU_CONN__",to_string(sizeof(BufferDesc)), "__",to_string(alignof(std::max_align_t)), "__",this->name_}).c_str()))
+            if(!queue_.open(make_prefix(prefix_,{"_",this->name_}).c_str()))
             {
                 return false;
             }
@@ -50,51 +46,31 @@ public:
         return name_;
     }
 
-    inline Waiter *waiter()
-    {
-        return &(queue_.elems_->waiter_);
-    }
-
-    inline queue_t *queue()
+    inline auto *queue()
     {
         return &queue_;
     }
 
     template <typename F>
-    bool wait_for(F &&pred, std::uint64_t tm)
+    void wait_for(F &&pred, std::uint64_t tm)
     {
-        if (tm == 0)
-        {
-            return !pred();
-        }
-        for (unsigned k = 0; pred();)
-        {
-            bool ret = true;
-            sleep(k, [&]
-            {
-                ret = queue_.elems_->waiter_.wait_for(std::forward<F>(pred), tm);
-                k   = 0; 
-            });
-            if (!ret)
-            {
-                return false; // timeout or fail
-            }
-            if (k == 0)
-            {
-                break; // k has been reset
-            }
-        }
-        return true;
+        waiter()->wait_for(std::forward<F>(pred), tm);
+    }
+
+    inline Waiter *waiter() noexcept
+    {
+        return queue_.waiter();
     }
 
     void disconnect()
     {
+        waiter()->quit();
         queue_.disconnect();
     }
 private:
-    string prefix_;
-    string name_;
-    queue_t queue_;
+    std::string prefix_;
+    std::string name_;
+    Queue<Descriptor, Choose> queue_;
 };
 
 

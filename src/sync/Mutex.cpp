@@ -14,11 +14,12 @@ namespace detail
 Mutex::Mutex()
     : mutex_()
 {
+    // open();
 }
 
-Mutex::~Mutex()
+pthread_mutex_t const *Mutex::native() const noexcept
 {
-    // close();
+    return &mutex_;
 }
 
 pthread_mutex_t *Mutex::native() noexcept
@@ -26,17 +27,20 @@ pthread_mutex_t *Mutex::native() noexcept
     return &mutex_;
 }
 
+bool Mutex::valid() const noexcept
+{
+    static const char tmp[sizeof(pthread_mutex_t)]{};
+    return (std::memcmp(tmp, &mutex_, sizeof(pthread_mutex_t)) != 0);
+}
+
 bool Mutex::init() noexcept
 {
-    // close();
-
-    // ::pthread_mutex_destroy(&mutex_);
-
-    // auto finally = Guard([this]
-    // {
-    //     close();
-    // }); // close when failed
-
+    close();
+    ::pthread_mutex_destroy(&mutex_);
+    auto finally = Guard([this]
+    {
+        close();
+    }); // close when failed
     // init Mutex
     int eno;
     pthread_mutexattr_t mutex_attr;
@@ -62,14 +66,8 @@ bool Mutex::init() noexcept
     {
         return false;
     }
-
-    if((eno = ::pthread_mutexattr_destroy(&mutex_attr)) != 0)
-    {
-        return false;
-    }
-    // finally.dismiss();
-
-    return true;
+    finally.dismiss();
+    return valid();
 }
 
 void Mutex::close() noexcept
@@ -82,6 +80,8 @@ void Mutex::close() noexcept
 
 bool Mutex::lock(std::uint64_t tm) noexcept
 {
+    if (!valid())
+        return false;
     for (;;)
     {
         auto ts = make_timespec(tm);
@@ -116,6 +116,8 @@ bool Mutex::lock(std::uint64_t tm) noexcept
 
 bool Mutex::try_lock() noexcept(false)
 {
+    if (!valid())
+        return false;
     auto ts = make_timespec(0);
     int eno = ::pthread_mutex_timedlock(&mutex_, &ts);
     switch (eno)
@@ -146,6 +148,8 @@ bool Mutex::try_lock() noexcept(false)
 
 bool Mutex::unlock() noexcept
 {
+    if (!valid())
+        return false;
     int eno;
     if ((eno = ::pthread_mutex_unlock(&mutex_)) != 0)
     {
@@ -153,7 +157,6 @@ bool Mutex::unlock() noexcept
     }
     return true;
 }
-
 
 } // namespace detail
 } // namespace ipc

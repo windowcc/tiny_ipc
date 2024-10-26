@@ -3,22 +3,30 @@
 
 #include <cstdint>
 #include <Handle.h>
-#include <sync/Mutex.h>
+#include <ipc/def.h>
 
 namespace ipc {
 namespace detail {
 
+class Mutex;
+
 class Condition
 {
 public:
-    explicit Condition();
-    ~Condition();
-public:
+    Condition();
+    ~Condition() = default;
+
+    pthread_cond_t const *native() const noexcept;
+
+    pthread_cond_t *native() noexcept;
+
+    bool valid() const noexcept;
+
     bool init() noexcept;
 
     void close() noexcept;
 
-    bool wait(Mutex &mtx, std::uint64_t tm = static_cast<uint64_t>(TimeOut::INVALID_TIMEOUT)) noexcept;
+    bool wait(Mutex &mtx, std::uint64_t tm = static_cast<uint64_t>(TimeOut::DEFAULT_TIMEOUT)) noexcept;
 
     bool notify(Mutex &) noexcept;
 
