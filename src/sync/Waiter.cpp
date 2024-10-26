@@ -9,43 +9,34 @@ namespace detail
 Waiter::Waiter()
     : cond_()
     , mutex_()
+    , quit_(false)
 {
-    // open(name);
 }
 
 Waiter::~Waiter()
 {
-    close();
-}
 
-bool Waiter::valid() const noexcept
-{
-    return cond_.valid() && mutex_.valid();
-}
-
-bool Waiter::init() noexcept
-{
-    return cond_.init() && mutex_.init();
-}
-
-void Waiter::close() noexcept
-{
-    cond_.close();
-    mutex_.close();
 }
 
 bool Waiter::notify() noexcept
 {
+    {
+        std::lock_guard<Mutex> barrier{ mutex_ };
+    }
     return cond_.notify(mutex_);
 }
 
 bool Waiter::broadcast() noexcept
 {
+    {
+        std::lock_guard<Mutex> barrier{ mutex_ };
+    }
     return cond_.broadcast(mutex_);
 }
 
 bool Waiter::quit()
 {
+    quit_.store(true, std::memory_order_release);
     return broadcast();
 }
 

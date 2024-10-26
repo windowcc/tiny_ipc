@@ -1,6 +1,7 @@
 #ifndef _IPC_SYNC_MUTEX_H_
 #define _IPC_SYNC_MUTEX_H_
 
+#include <atomic>
 #include <cstdint>
 #include <mutex>
 #include <system_error>
@@ -15,24 +16,22 @@ namespace detail
 class Mutex
 {
 public:
-    Mutex();
-    ~Mutex() = default;
-
-    pthread_mutex_t const *native() const noexcept;
-
-    pthread_mutex_t *native() noexcept;
-
-    bool valid() const noexcept;
+    explicit Mutex();
+    ~Mutex();
 
     bool init() noexcept;
 
     void close() noexcept;
+
+    pthread_mutex_t *native() noexcept;
 
     bool lock(uint64_t tm = static_cast<uint64_t>(TimeOut::INVALID_TIMEOUT)) noexcept;
 
     bool try_lock() noexcept(false);
 
     bool unlock() noexcept;
+private:
+
 private:
     pthread_mutex_t mutex_;
 };

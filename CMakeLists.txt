@@ -2,20 +2,10 @@ cmake_minimum_required(VERSION 3.16.3)
 cmake_policy(VERSION 3.16.3...3.20.3)
 project(tiny-ipc)
 
-set(Tinyipc_VERSION_MAJOR 1)
-set(Tinyipc_VERSION_MINOR 0)
-
 option(LIBIPC_BUILD_TESTS       "Build all of libipc's own tests."                      OFF)
-option(LIBIPC_BUILD_SAMPLES     "Build all of libipc's own samples."                      ON)
+option(LIBIPC_BUILD_SAMPLES     "Build all of libipc's own samples."                    ON)
 option(LIBIPC_BUILD_SHARED_LIBS "Build shared libraries (DLLs)."                        ON)
 option(LIBIPC_USE_STATIC_CRT    "Set to ON to build with static CRT on Windows (/MT)."  OFF)
-
-set(TINYIPC_MAX_CNT 64)
-
-configure_file (
-    "${PROJECT_SOURCE_DIR}/config.h.in"
-    "${PROJECT_BINARY_DIR}/config.h"
-)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_CXX_STANDARD 17)
@@ -65,6 +55,5 @@ if (LIBIPC_BUILD_TESTS)
 endif()
 
 if (LIBIPC_BUILD_SAMPLES)
-    add_subdirectory(examples/channel)
-    add_subdirectory(examples/route)
+    add_subdirectory(examples/send_recv)
 endif()

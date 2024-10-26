@@ -1,8 +1,9 @@
+
 set(${PROJECT_NAME}_source_files
     Buffer.cpp
     Ipc.cpp
+    PoolAlloc.cpp
     Handle.cpp
-    Descriptor.cpp
 )
 
 set(${PROJECT_NAME}_sync_source_files
@@ -10,6 +11,13 @@ set(${PROJECT_NAME}_sync_source_files
     sync/Mutex.cpp
     sync/Waiter.cpp
 )
+
+file(GLOB HEAD_FILES
+  ${PROJECT_SOURCE_DIR}/include/ipc/*.h
+  ${PROJECT_SOURCE_DIR}/circ/*.h
+  ${PROJECT_SOURCE_DIR}/memory/*.h
+  ${PROJECT_SOURCE_DIR}/platform/*.h
+  ${PROJECT_SOURCE_DIR}/utility/*.h)
 
 if (LIBIPC_BUILD_SHARED_LIBS)
   add_library(${PROJECT_NAME} SHARED 
@@ -39,12 +47,18 @@ set_target_properties(${PROJECT_NAME}
 	LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
 	RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 
+# set version
+# set_target_properties(${PROJECT_NAME}
+#     PROPERTIES
+#     VERSION ${PACKAGE_VERSION}
+#     SOVERSION 3)
+
 target_include_directories(${PROJECT_NAME}
   PUBLIC  
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src>
   PRIVATE ${PROJECT_SOURCE_DIR}
-          ${PROJECT_SOURCE_DIR}/build)
+          $<$<BOOL:UNIX>:${PROJECT_SOURCE_DIR}/platform/linux>)
 
 if(NOT MSVC)
   target_link_libraries(${PROJECT_NAME} PUBLIC

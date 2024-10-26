@@ -19,8 +19,15 @@ enum : unsigned
 
 enum class TimeOut : std::uint64_t
 {
+    ZERO_TIMEOUT = 0,
     DEFAULT_TIMEOUT = 100, // ms
     INVALID_TIMEOUT = (std::numeric_limits<std::uint64_t>::max)(),
+};
+
+enum class Relation : uint32_t
+{
+    SINGLE,
+    MULTI
 };
 
 enum class Transmission : uint32_t
@@ -30,11 +37,8 @@ enum class Transmission : uint32_t
 };
 
 // producer-consumer policy flag
-template <Transmission Ts>
-struct Wr
-{
-    constexpr static bool is_broadcast = (Ts == Transmission::BROADCAST);
-};
+template <Relation Rp, Relation Rc, Transmission Ts>
+struct Wr {};
 
 } // namespace ipc
 
