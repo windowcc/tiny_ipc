@@ -4,7 +4,7 @@
 #include <MessageQueue.hpp>
 #include <Choose.hpp>
 #include <ipc/Callback.h>
-#include <core/Fragment.hpp>
+#include <core/Cache.hpp>
 #include <core/Segment.hpp>
 
 using namespace ipc::detail;
@@ -28,7 +28,7 @@ struct Ipc<Wr>::IpcImpl
 {
     // 用于发送描述信息
     std::shared_ptr<MessageQueue<Choose<Segment, Wr>> > handle { nullptr };
-    std::unique_ptr<FragmentBase> fragment {nullptr};
+    std::unique_ptr<CacheBase> fragment {nullptr};
     unsigned mode { SENDER };
     std::atomic_bool connected { false };
     CallbackPtr callback {nullptr};
@@ -94,10 +94,10 @@ bool Ipc<Wr>::connect(char const * name, const unsigned &mode)
     switch (mode)
     {
     case static_cast<unsigned>(SENDER):
-        FRAGMENT = std::make_unique<Fragment<SENDER>>();
+        FRAGMENT = std::make_unique<Cache<SENDER>>();
         break;
     case static_cast<unsigned>(RECEIVER):
-        FRAGMENT = std::make_unique<Fragment<RECEIVER>>();
+        FRAGMENT = std::make_unique<Cache<RECEIVER>>();
         break;
     default:
         break;

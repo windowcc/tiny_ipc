@@ -1,5 +1,5 @@
-#ifndef _IPC_CORE_FRAGMENT_H_
-#define _IPC_CORE_FRAGMENT_H_
+#ifndef _IPC_CORE_Cache_H_
+#define _IPC_CORE_Cache_H_
 
 #include <config.h>
 #include <thread>
@@ -21,6 +21,7 @@ namespace detail
 static constexpr uint32_t DEFAULT_WRITE_CNT = 1;
 static constexpr std::size_t DEFAULT_CACHE_SIZE = 1024 * 1024 * 1024; // 1G
 static const std::string DEFAULT_SHM_NAME = "tiny_ipc_";
+static constexpr uint32_t DEFAULT_TIMEOUT_VALUE = 10 * 1000; // mill
 
 // Unified release after the application ends
 static std::unordered_map<std::string, std::shared_ptr<SpinLock>> locks;
@@ -33,11 +34,11 @@ static std::string thread_id_to_string(const std::thread::id &id)
     return oss.str();
 }
 
-class FragmentBase
+class CacheBase
 {
 public:
-    FragmentBase() = default;
-    virtual ~FragmentBase() = default;
+    CacheBase() = default;
+    virtual ~CacheBase() = default;
 
 public:
     virtual bool init() = 0;
@@ -55,18 +56,18 @@ public:
 };
 
 template<unsigned>
-class Fragment;
+class Cache;
 
 
 // Just need to add a lock on the writer end
 // When releasing memory, it will first determine whether the usage count of the current memory segment has been reset.
 // Therefore, there is no need to perform a locking operation
 template<>
-class Fragment<SENDER> : public FragmentBase
+class Cache<SENDER> : public CacheBase
 {
 public:
-    Fragment<SENDER>()
-        : FragmentBase()
+    Cache<SENDER>()
+        : CacheBase()
         , id_{std::this_thread::get_id()}
         , handle_ {}
         , pool_ {nullptr}
@@ -74,13 +75,13 @@ public:
         
     }
 
-    virtual ~Fragment<SENDER>()
+    virtual ~Cache<SENDER>()
     {
         // free all apply memory
         // There may be some memory that has not been read properly
         for (auto &it : map_)
         {
-            pool_->deallocate(it.first,it.second);
+            pool_->deallocate(it.first,std::get<0>(it.second));
         }
         map_.clear();
     }
@@ -112,7 +113,9 @@ public:
 
     virtual Descriptor write(void const *data, const std::size_t &size,const uint32_t &cnt) final
     {
-        recyle_memory();
+        
+        std::chrono::time_point<std::chrono::steady_clock> now = std::chrono::steady_clock::now();
+        recyle_memory(now);
 
         auto pool_size = align_size(size + sizeof(uint32_t), alignof(std::max_align_t));
         void *pool_data = nullptr;
@@ -134,7 +137,7 @@ public:
         memcpy(static_cast<char*>(pool_data) + sizeof(uint32_t),data,size);
         
         map_.insert(
-            {pool_data,pool_size}
+            {pool_data,std::make_tuple(pool_size,now)}
         );
 
         return
@@ -146,7 +149,7 @@ public:
     }
 
 private:
-    void recyle_memory()
+    void recyle_memory(const std::chrono::time_point<std::chrono::steady_clock> &now)
     {
         if(map_.empty())
         {
@@ -155,9 +158,9 @@ private:
         for (auto it = map_.begin(); it != map_.end();)
         {
             std::atomic<uint32_t> *count = static_cast<std::atomic<uint32_t>*>(it->first);
-            if(!count->load())
+            if(!count->load() || (std::chrono::duration_cast<std::chrono::milliseconds>(now - std::get<1>(it->second)).count() >= DEFAULT_TIMEOUT_VALUE))
             {
-                pool_->deallocate(it->first,it->second);
+                pool_->deallocate(it->first,std::get<0>(it->second));
                 it = map_.erase(it);
             }
             else
@@ -175,21 +178,21 @@ private:
     // shared memory manager
     std::shared_ptr<std::pmr::monotonic_buffer_resource> pool_;
     // already memory using map
-    std::unordered_map<void*,std::size_t> map_;
+    std::unordered_map<void*,std::tuple<std::size_t,std::chrono::time_point<std::chrono::steady_clock>>> map_;
 };
 
 template<>
-class Fragment<RECEIVER> : public FragmentBase
+class Cache<RECEIVER> : public CacheBase
 {
 public:
-    Fragment<RECEIVER>()
-        : FragmentBase()
+    Cache<RECEIVER>()
+        : CacheBase()
         , handles_()
     {
         
     }
 
-    virtual ~Fragment<RECEIVER>()
+    virtual ~Cache<RECEIVER>()
     {
         handles_.clear();
     }
@@ -250,4 +253,4 @@ private:
 } // namespace detail
 } // namespace ipc
 
-#endif // ! _IPC_CORE_FRAGMENT_H_
+#endif // ! _IPC_CORE_Cache_H_
