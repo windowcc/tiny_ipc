@@ -21,7 +21,7 @@ public:
     Connection()
         :cc_{}
     {
-        assert(!(TINYIPC_MAX_CNT % 2) && "TINYIPC_MAX_CNT is must be an even number.");
+        assert(!(MAX_CONNECTIONS % 2) && "MAX_CONNECTIONS is must be an even number.");
     }
 
     virtual ~Connection()
@@ -34,8 +34,8 @@ public:
     {
         auto guard = std::unique_lock(lcc_);
 
-        uint32_t start_pos = (mode == SENDER) ? 0 : (TINYIPC_MAX_CNT / 2);
-        uint32_t end_pos = (mode == SENDER) ?  (TINYIPC_MAX_CNT / 2) : TINYIPC_MAX_CNT;
+        uint32_t start_pos = (mode == SENDER) ? 0 : (MAX_CONNECTIONS / 2);
+        uint32_t end_pos = (mode == SENDER) ?  (MAX_CONNECTIONS / 2) : MAX_CONNECTIONS;
         uint32_t cur_pos = start_pos;
         for (; cur_pos < end_pos; cur_pos++)
         {
@@ -69,13 +69,13 @@ public:
     {
         auto guard = std::unique_lock(lcc_);
         auto tmp = cc_;
-        tmp << (TINYIPC_MAX_CNT / 2);
+        tmp << (MAX_CONNECTIONS / 2);
         return tmp.count();
     }
 
 protected:
     SpinLock lcc_;
-    std::bitset<TINYIPC_MAX_CNT> cc_;
+    std::bitset<MAX_CONNECTIONS> cc_;
 };
 
 } // namespace detail
