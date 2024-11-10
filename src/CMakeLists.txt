@@ -4,6 +4,9 @@ set(${PROJECT_NAME}_source_files
     Handle.cpp
     Descriptor.cpp
 )
+set(${PROJECT_NAME}_core_source_files
+    core/Connection.cpp
+)
 
 set(${PROJECT_NAME}_sync_source_files
     sync/Condition.cpp
@@ -14,8 +17,8 @@ set(${PROJECT_NAME}_sync_source_files
 if (LIBIPC_BUILD_SHARED_LIBS)
   add_library(${PROJECT_NAME} SHARED 
     ${${PROJECT_NAME}_source_files}
+    ${${PROJECT_NAME}_core_source_files}
     ${${PROJECT_NAME}_sync_source_files}
-    ${${PROJECT_NAME}_platform_source_files}
     ${HEAD_FILES}
   )
   target_compile_definitions(${PROJECT_NAME}

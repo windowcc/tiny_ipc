@@ -6,7 +6,7 @@
 #include <bitset>
 #include <type_traits>
 #include <ipc/def.h>
-#include <core/Connection.hpp>
+#include <core/Connection.h>
 #include <sync/RwLock.h>
 
 namespace ipc
