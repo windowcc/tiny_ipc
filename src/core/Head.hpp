@@ -40,9 +40,9 @@ public:
         }
     }
 
-    uint32_t connections(std::memory_order order = std::memory_order_acquire) noexcept
+    uint32_t connections() noexcept
     {
-        return base_t::ctx_.connections(order);
+        return base_t::ctx_.connections();
     }
 
     uint32_t connect(const unsigned &mode = SENDER) noexcept

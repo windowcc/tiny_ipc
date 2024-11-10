@@ -48,7 +48,7 @@ uint32_t Connection::disconnect(const unsigned &mode,uint32_t cc_id) noexcept
     return cc_id;
 }
 
-uint32_t Connection::Connection::connections(std::memory_order order) noexcept
+uint32_t Connection::Connection::connections() noexcept
 {
     auto guard = std::unique_lock(lcc_);
     return cc_.count();

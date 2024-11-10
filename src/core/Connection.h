@@ -24,7 +24,7 @@ public:
 
     uint32_t disconnect(const unsigned &mode = SENDER,uint32_t cc_id = 0) noexcept;
 
-    uint32_t connections(std::memory_order order = std::memory_order_acquire) noexcept;
+    uint32_t connections() noexcept;
 
     uint32_t recv_count() noexcept;
 

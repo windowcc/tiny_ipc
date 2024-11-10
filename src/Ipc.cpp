@@ -259,7 +259,7 @@ bool Ipc<Wr>::write(void const *data, std::size_t size)
     }
     auto que = HANDLE->queue();
     if (que == nullptr || que->segment() == nullptr || !que->connect() ||
-            !(que->segment()->connections(std::memory_order_relaxed)))
+            !(que->segment()->connections()))
     {
         if(CALLBACK)
         {
