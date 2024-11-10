@@ -171,7 +171,7 @@ bool Ipc<Wr>::reconnect(unsigned mode)
     if (mode & RECEIVER)
     {
         que->disconnect();
-        if (que->connect())
+        if (que->connect(mode))
         {
             if(CALLBACK)
             {

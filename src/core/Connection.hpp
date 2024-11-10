@@ -14,17 +14,8 @@ namespace ipc
 namespace detail
 {
 
-template<typename Wr> 
-class Connection;
-
-// 高位 RECEIVER
-// 低位 SENDER
-
-
-
-// unicast
-template<>
-class Connection<Wr<Transmission::UNICAST>>
+// 高位是receiver,低位是sender
+class Connection
 {
 public:
     Connection()
@@ -39,38 +30,32 @@ public:
         cc_.reset();
     }
 public:
-    virtual  uint32_t connect(const unsigned &mode = SENDER) noexcept
+    virtual uint32_t connect(const unsigned &mode = SENDER) noexcept
     {
         auto guard = std::unique_lock(lcc_);
 
-        uint32_t start_pos = 0;
-        if(mode == RECEIVER)
+        uint32_t start_pos = (mode == SENDER) ? 0 : (TINYIPC_MAX_CNT / 2);
+        uint32_t end_pos = (mode == SENDER) ?  (TINYIPC_MAX_CNT / 2) : TINYIPC_MAX_CNT;
+        uint32_t cur_pos = start_pos;
+        for (; cur_pos < end_pos; cur_pos++)
         {
-            if(cc_[TINYIPC_MAX_CNT - 1])
+            if(!cc_.test(cur_pos))
             {
-                return 0;
+                cc_.set(cur_pos);
+                break;
             }
-            start_pos = TINYIPC_MAX_CNT;
         }
-        else
+        if(cur_pos == end_pos)
         {
-            for (uint32_t i = 1; i < TINYIPC_MAX_CNT; i++)
-            {
-                if(cc_[i - 1] == 0)
-                {
-                    start_pos = i;
-                    break;
-                }
-            }
-        }        
-        cc_[start_pos - 1] = 1;
-        return start_pos;
+            assert("The maximum subscript is exceeded.");
+        }
+        return cur_pos + 1;
     }
 
     virtual uint32_t disconnect(const unsigned &mode = SENDER,uint32_t cc_id = 0) noexcept
     {
         auto guard = std::unique_lock(lcc_);
-        cc_[cc_id] = 0;
+        cc_.reset(cc_id);
         return cc_id;
     }
 
@@ -83,57 +68,14 @@ public:
     virtual uint32_t recv_count() noexcept
     {
         auto guard = std::unique_lock(lcc_);
-        return cc_[TINYIPC_MAX_CNT - 1 ] ? 1 : 0;
+        auto tmp = cc_;
+        tmp << (TINYIPC_MAX_CNT / 2);
+        return tmp.count();
     }
+
 protected:
     SpinLock lcc_;
     std::bitset<TINYIPC_MAX_CNT> cc_;
-};
-
-
-// brocast
-template<>
-class Connection<Wr<Transmission::BROADCAST>> : public Connection<Wr<Transmission::UNICAST>>
-{
-public:
-    Connection()
-        : Connection<Wr<Transmission::UNICAST>>{}
-    {
-
-    }
-    virtual ~Connection()
-    {
-        
-    }
-public:
-    virtual uint32_t connect(const unsigned &mode = SENDER) noexcept final
-    {
-        auto guard = std::unique_lock(lcc_);
-        uint32_t pos = 0;
-        uint32_t start_pos = mode == SENDER ? 1 : TINYIPC_MAX_CNT / 2;
-        uint32_t end_pos = mode == SENDER ? TINYIPC_MAX_CNT / 2 : TINYIPC_MAX_CNT;
-
-        for (uint32_t i = start_pos; i < end_pos; i++)
-        {
-            if(cc_[i - 1] == 0)
-            {
-                pos = i;
-                break;
-            }
-        }
-        if(pos)
-        {
-            cc_[pos - 1] = 1;
-        }
-        return pos;
-    }
-
-    virtual uint32_t recv_count() noexcept final
-    {
-        auto guard = std::unique_lock(lcc_);
-        return (cc_ << (TINYIPC_MAX_CNT / 2)).count();        
-    }
-
 };
 
 } // namespace detail

@@ -25,7 +25,7 @@ template<typename Wr>
 class Content;
 
 template <>
-class Content<Wr<Transmission::UNICAST>> : public Connection<Wr<Transmission::UNICAST>>
+class Content<Wr<Transmission::UNICAST>> : public Connection
 {
 public:
     template <std::size_t DataSize, std::size_t AlignSize>
@@ -82,7 +82,7 @@ protected:
 
 
 template <>
-class Content<Wr<Transmission::BROADCAST>> : public Connection<Wr<Transmission::BROADCAST>>
+class Content<Wr<Transmission::BROADCAST>> : public Connection
 {
 public:
     template <std::size_t DataSize, std::size_t AlignSize>
