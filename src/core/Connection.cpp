@@ -47,7 +47,7 @@ uint32_t Connection::connect(const unsigned &mode) noexcept
 uint32_t Connection::disconnect(const unsigned &mode,uint32_t cc_id) noexcept
 {
     auto guard = std::unique_lock(lcc_);
-    cc_.reset(cc_id);
+    cc_.reset(cc_id - 1);
     return cc_id;
 }
 
