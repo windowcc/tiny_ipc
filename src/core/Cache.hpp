@@ -84,6 +84,13 @@ public:
             pool_->deallocate(it.first,std::get<0>(it.second));
         }
         map_.clear();
+
+        // free lock
+        auto it = locks.find(std::string(handle_.name()));
+        if(it != locks.end())
+        {
+            locks.erase(it);
+        }
     }
 
 public:
@@ -97,10 +104,10 @@ public:
         }
 
         // Create a new lock, if it does not exist
-        if(locks.find(std::string{"/"} + name) == locks.end())
+        if(locks.find(std::string(handle_.name())) == locks.end())
         {
             locks.insert(
-                {std::string{"/"} + name,std::make_shared<SpinLock>()}
+                {std::string(handle_.name()),std::make_shared<SpinLock>()}
             );
         }
 
@@ -207,7 +214,6 @@ public:
         Handle *handle = get_handle(desc.id());
         if(!handle || !callback)
         {
-            std::cout << "+++++++++++++++++++++++++++++" << std::endl;
             return false;
         }
         void *pool_data = static_cast<char*>(handle->get()) + desc.offset();
