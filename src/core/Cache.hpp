@@ -207,6 +207,7 @@ public:
         Handle *handle = get_handle(desc.id());
         if(!handle || !callback)
         {
+            std::cout << "+++++++++++++++++++++++++++++" << std::endl;
             return false;
         }
         void *pool_data = static_cast<char*>(handle->get()) + desc.offset();
@@ -216,8 +217,8 @@ public:
         { 
             callback(&buf);
         }
-        static_cast<std::atomic<uint32_t>*>(pool_data)->fetch_sub(1, std::memory_order_acquire);
-        return !static_cast<std::atomic<uint32_t>*>(pool_data)->load(std::memory_order_release);
+        static_cast<std::atomic<uint32_t>*>(pool_data)->fetch_sub(1, std::memory_order_relaxed);
+        return !(*static_cast<std::atomic<uint32_t>*>(pool_data));
     }
 private:
 

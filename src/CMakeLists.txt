@@ -6,6 +6,7 @@ set(${PROJECT_NAME}_source_files
 )
 set(${PROJECT_NAME}_core_source_files
     core/Connection.cpp
+    core/Content.cpp
 )
 
 set(${PROJECT_NAME}_sync_source_files

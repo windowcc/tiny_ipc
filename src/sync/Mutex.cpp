@@ -14,7 +14,6 @@ namespace detail
 Mutex::Mutex()
     : mutex_()
 {
-    // open();
 }
 
 pthread_mutex_t const *Mutex::native() const noexcept

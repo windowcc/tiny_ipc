@@ -162,7 +162,7 @@ public:
     template <typename Descriptor, typename... P>
     bool push(P &&...params)
     {
-        if (segment_ == nullptr)
+        if (segment_ == nullptr || sender_flag_ == false)
         {
             return false;
         }
@@ -175,7 +175,7 @@ public:
     template <typename Descriptor, typename F>
     bool pop(Descriptor &item, F &&out)
     {
-        if (segment_ == nullptr)
+        if (segment_ == nullptr || sender_flag_ == false)
         {
             return false;
         }

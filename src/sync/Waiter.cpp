@@ -10,7 +10,6 @@ Waiter::Waiter()
     : cond_()
     , mutex_()
 {
-    // open(name);
 }
 
 Waiter::~Waiter()

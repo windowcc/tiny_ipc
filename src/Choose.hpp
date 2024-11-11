@@ -2,7 +2,7 @@
 #define _IPC_POLICY_H_
 
 #include <type_traits>
-#include <core/Content.hpp>
+#include <core/Content.h>
 #include <core/Segment.hpp>
 
 namespace ipc
@@ -10,15 +10,15 @@ namespace ipc
 namespace detail
 {
 
-    template <template <typename, std::size_t...> class Segment, typename Wr>
-    struct Choose;
+template <template <typename, std::size_t...> class Segment>
+struct Choose;
 
-    template <typename Wr>
-    struct Choose<Segment, Wr>
-    {
-        template <std::size_t DataSize, std::size_t AlignSize>
-        using segment_t = Segment<Content<Wr>, DataSize, AlignSize>;
-    };
+template<>
+struct Choose<Segment>
+{
+    template <std::size_t DataSize, std::size_t AlignSize>
+    using segment_t = Segment<Content, DataSize, AlignSize>;
+};
 
 } // namespace detail
 } // namespace ipc

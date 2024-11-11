@@ -27,7 +27,7 @@ template<typename Wr>
 struct Ipc<Wr>::IpcImpl
 {
     // 用于发送描述信息
-    std::shared_ptr<MessageQueue<Choose<Segment, Wr>> > handle { nullptr };
+    std::shared_ptr<MessageQueue<Choose<Segment>> > handle { nullptr };
     std::unique_ptr<CacheBase> fragment {nullptr};
     unsigned mode { SENDER };
     std::atomic_bool connected { false };
@@ -115,7 +115,7 @@ bool Ipc<Wr>::connect(char const * name, const unsigned &mode)
     disconnect();
     if(!valid())
     {
-        HANDLE = std::make_shared<MessageQueue<Choose<Segment, Wr>> >(nullptr,name);
+        HANDLE = std::make_shared<MessageQueue<Choose<Segment>>>(nullptr,name);
         if(!HANDLE->init())
         {
             if(CALLBACK)

@@ -7,6 +7,9 @@ namespace ipc
 namespace detail
 {
 
+// hex receiver
+// low sender
+
 Connection::Connection()
     :cc_{}
 {
@@ -56,10 +59,10 @@ uint32_t Connection::Connection::connections() noexcept
 
 uint32_t Connection::recv_count() noexcept
 {
+    std::bitset<MAX_CONNECTIONS> bitset(
+        std::string(MAX_CONNECTIONS / 2, '1') + std::string(MAX_CONNECTIONS / 2, '0'));
     auto guard = std::unique_lock(lcc_);
-    auto tmp = cc_;
-    tmp << (MAX_CONNECTIONS / 2);
-    return tmp.count();
+    return (bitset & cc_).count();
 }
 
 } // namespace detail
